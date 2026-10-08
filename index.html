@@ -287,11 +287,18 @@ const dateStr=ts=>new Date(ts).toLocaleDateString("pt-BR",{day:"2-digit",month:"
 const timeStr=ts=>new Date(ts).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
 
 /* ---------- settings ---------- */
-const DEF={key:"",stt:"whisper-large-v3-turbo",llm:"openai/gpt-oss-120b",chunk:30,notesMin:5,sil:0.012,diar:true,
-  disc:["Teologia do Novo Testamento","Hebraico","Português 3","Outra"]};
+const DEF={key:"",stt:"whisper-large-v3",llm:"openai/gpt-oss-120b",chunk:45,notesMin:5,sil:0.012,diar:true,
+  disc:["Grego","Teologia do Novo Testamento","Hebraico","Português 3","Outra"]};
 let S={...DEF};
 try{const r=JSON.parse(localStorage.getItem("caderno.set")||"null");if(r)S={...DEF,...r}}catch(e){}
 if(/llama-3\.3-70b/.test(S.llm))S.llm=DEF.llm;
+if(!S.v2){S.v2=true;if(S.stt==="whisper-large-v3-turbo")S.stt=DEF.stt;if(S.chunk===30)S.chunk=45;
+  if(!S.disc.some(d=>/grego/i.test(d)))S.disc.unshift("Grego");saveS()}
+/* vocabulary hints so the transcriber and the notes keep each language straight */
+function lingua(disc){return /grego/i.test(disc)?"grego":/hebr/i.test(disc)?"hebraico":""}
+const VOCAB={
+  grego:"Grego bíblico (koiné) do Novo Testamento. Termos: lógos, cháris, pístis, agápe, dikaiosýne, ekklesía, kýrios, Christós, alfabeto grego, alfa, beta, gama, delta, ômega, acento agudo, espírito áspero, artigo, nominativo, genitivo, dativo, acusativo, vocativo, declinação, aoristo, presente, imperfeito, particípio, infinitivo, voz média, Septuaginta.",
+  hebraico:"Hebraico bíblico do Antigo Testamento. Termos: álef, bet, shevá, daguesh, qal, nifal, piel, pual, hifil, hitpael, qatal, yiqtol, waw consecutivo, construto, Elohim, YHWH, Torá, massoretas."};
 const LLM_FALLBACK=["openai/gpt-oss-120b","openai/gpt-oss-20b","qwen/qwen3.8-27b","moonshotai/kimi-k2-instruct"];
 function saveS(){try{localStorage.setItem("caderno.set",JSON.stringify(S))}catch(e){}}
 
@@ -354,12 +361,13 @@ function cleanSegments(json){
     if((s.compression_ratio??1)>2.6)return false;
     return !HALLU.some(re=>re.test(t))}).map(s=>s.text.trim()).join(" ").replace(/\s+/g," ").trim()}
 
-function sttPrompt(s){const tail=s.entries.slice(-3).map(e=>e.text).join(" ").slice(-180);
-  return (`Aula de ${s.disciplina} num seminário presbiteriano. ${tail}`).slice(0,400)}
+function sttPrompt(s){const tail=s.entries.slice(-2).map(e=>e.text).join(" ").slice(-160);const v=VOCAB[lingua(s.disciplina)]||"";
+  return (`Aula de ${s.disciplina}${s.tema?" ("+s.tema+")":""}, em português, num seminário presbiteriano. ${v} ${tail}`).slice(0,700)}
 
 async function labelSpeakers(text,s){
   const ctx=s.entries.slice(-4).map(e=>`${e.who}: ${e.text}`).join("\n").slice(-1200);
   const sys=`Você divide um trecho transcrito de uma aula de seminário teológico em falas e rotula quem fala.
+Disciplina desta aula: ${s.disciplina}.
 Rótulos permitidos: "Professor" (quem está lecionando), "Aluno" (perguntas ou comentários de estudantes), "Outro" (avisos de terceiros, leitura de outra pessoa etc.).
 Regras: não resuma, não corrija e não acrescente palavras; copie o texto exatamente, só dividindo onde muda quem fala. Na dúvida, use "Professor". Um trecho curto normalmente é uma única fala.
 Responda só com JSON: {"falas":[{"quem":"Professor","texto":"..."}]}`;
@@ -516,12 +524,13 @@ async function updateNotes(s,force){
       for(const x of fresh){const line=`[${fmt(x.t)}] ${x.who==="x"?"":x.who+": "}${x.text}\n`;if(txt.length+line.length>8000&&used)break;txt+=line;used++}
       const batch=fresh.slice(0,used);fresh=fresh.slice(used);
       const sys=`Você é o caderno de anotações de um estudante de Bacharel em Teologia (seminário presbiteriano, tradição reformada).
-Atualize as anotações da aula com o trecho novo da transcrição. Mantenha tudo o que já existe, acrescente o novo e corrija erros óbvios de transcrição (nomes, termos teológicos, palavras gregas e hebraicas).
+Atualize as anotações da aula com o trecho novo da transcrição.
+${lingua(s.disciplina)?`Esta é uma aula de ${s.disciplina}: os termos estrangeiros citados são em ${lingua(s.disciplina)}. Não classifique como outro idioma. A transcrição automática costuma escrever mal palavras em ${lingua(s.disciplina)}; reconstrua a forma correta transliterada (e, se tiver certeza, também na escrita original).`:""} Mantenha tudo o que já existe, acrescente o novo e corrija erros óbvios de transcrição (nomes, termos teológicos, palavras gregas e hebraicas).
 Regras:
 - Português do Brasil, frases curtas, sem enrolação. Registre o que o professor ensinou, não opiniões suas.
 - topicos: siga a ordem da aula; "inicio" é o horário do trecho em que o tópico começou. Junte pontos repetidos.
 - referencias: no formato brasileiro (Jo 3.16, 1Co 15.3-4). Só passagens realmente citadas.
-- originais: termos em grego/hebraico/aramaico/latim citados, transliterados.
+- originais: termos em grego/hebraico/aramaico/latim citados, transliterados, cada um com o idioma correto. Em aulas de língua, inclua também as regras gramaticais ensinadas em "conceitos".
 - perguntas_prova: perguntas que um professor faria sobre o conteúdo; inclua o que o professor disse que "cai na prova".
 - avisos: datas de prova, trabalhos, leituras pedidas.
 - Seja conciso: no máximo uns 8 pontos por tópico.
