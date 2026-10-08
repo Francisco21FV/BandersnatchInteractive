@@ -287,10 +287,12 @@ const dateStr=ts=>new Date(ts).toLocaleDateString("pt-BR",{day:"2-digit",month:"
 const timeStr=ts=>new Date(ts).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
 
 /* ---------- settings ---------- */
-const DEF={key:"",stt:"whisper-large-v3-turbo",llm:"llama-3.3-70b-versatile",chunk:30,notesMin:5,sil:0.012,diar:true,
+const DEF={key:"",stt:"whisper-large-v3-turbo",llm:"openai/gpt-oss-120b",chunk:30,notesMin:5,sil:0.012,diar:true,
   disc:["Teologia do Novo Testamento","Hebraico","Português 3","Outra"]};
 let S={...DEF};
 try{const r=JSON.parse(localStorage.getItem("caderno.set")||"null");if(r)S={...DEF,...r}}catch(e){}
+if(/llama-3\.3-70b/.test(S.llm))S.llm=DEF.llm;
+const LLM_FALLBACK=["openai/gpt-oss-120b","openai/gpt-oss-20b","qwen/qwen3.8-27b","moonshotai/kimi-k2-instruct"];
 function saveS(){try{localStorage.setItem("caderno.set",JSON.stringify(S))}catch(e){}}
 
 /* ---------- IndexedDB ---------- */
@@ -329,9 +331,16 @@ async function groq(path,opts){
   if(!r.ok){let m="";try{m=(await r.json()).error?.message||""}catch(e){}throw new Error(`Groq ${r.status}: ${m}`.trim())}
   return r.json()}
 async function chat(messages,{json=false,max=1500}={}){
-  const body={model:S.llm,messages,temperature:.2,max_tokens:max};
-  if(json)body.response_format={type:"json_object"};
-  const d=await groq("/chat/completions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const models=[S.llm,...LLM_FALLBACK.filter(m=>m!==S.llm)];let d,lastErr;
+  for(const model of models){
+    const body={model,messages,temperature:.2,max_tokens:max+(model.startsWith("openai/gpt-oss")?800:0)};
+    if(model.startsWith("openai/gpt-oss"))body.reasoning_effort="low";
+    if(json)body.response_format={type:"json_object"};
+    try{d=await groq("/chat/completions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      if(model!==S.llm){S.llm=model;saveS()}break}
+    catch(e){lastErr=e;if(e instanceof RateErr||!/model|decommission|not found|does not exist/i.test(e.message))throw e}
+  }
+  if(!d)throw lastErr;
   const txt=d.choices?.[0]?.message?.content||"";
   if(!json)return txt;
   try{return JSON.parse(txt)}catch(e){const m=txt.match(/\{[\s\S]*\}/);if(m)return JSON.parse(m[0]);throw e}}
@@ -504,7 +513,7 @@ async function updateNotes(s,force){
     let fresh=s.entries.filter(x=>x.t>s.notesUpTo);if(!fresh.length)return;
     while(fresh.length){
       let txt="",used=0;
-      for(const x of fresh){const line=`[${fmt(x.t)}] ${x.who==="x"?"":x.who+": "}${x.text}\n`;if(txt.length+line.length>14000&&used)break;txt+=line;used++}
+      for(const x of fresh){const line=`[${fmt(x.t)}] ${x.who==="x"?"":x.who+": "}${x.text}\n`;if(txt.length+line.length>8000&&used)break;txt+=line;used++}
       const batch=fresh.slice(0,used);fresh=fresh.slice(used);
       const sys=`Você é o caderno de anotações de um estudante de Bacharel em Teologia (seminário presbiteriano, tradição reformada).
 Atualize as anotações da aula com o trecho novo da transcrição. Mantenha tudo o que já existe, acrescente o novo e corrija erros óbvios de transcrição (nomes, termos teológicos, palavras gregas e hebraicas).
@@ -538,7 +547,7 @@ function normNotes(o){o=o||{};const arr=v=>Array.isArray(v)?v:[];
 async function finalSummary(s){
   const marks=s.marks.map(m=>`[${fmt(m.t)}] ${m.nota||"(sem nota)"} — trecho: "${m.trecho}"`).join("\n");
   let tr=s.entries.map(x=>`[${fmt(x.t)}] ${x.who==="x"?"":x.who+": "}${x.text}`).join("\n");
-  const trNote=tr.length>16000?"(transcrição completa omitida por ser longa; use as anotações)":tr;
+  const trNote=tr.length>9000?"(transcrição completa omitida por ser longa; use as anotações)":tr;
   const sys=`Você escreve o resumo de estudo de uma aula de seminário teológico (presbiteriano) para o próprio aluno revisar.
 Formato Markdown, em português do Brasil:
 ## Ideia central (2–3 frases)
