@@ -170,7 +170,7 @@ dl.terms dd small{color:var(--muted);font-family:var(--f-ui)}
         <div style="display:flex;flex-direction:column;gap:12px">
           <h2>Nova aula</h2>
           <label class="f">Disciplina<select id="selDisc"></select></label>
-          <label class="f">Tema da aula (opcional)<input type="text" id="inTema" placeholder="Ex.: Justificação em Romanos 3–5"></label>
+          <label class="f">Tema ou texto do dia (ajuda muito)<input type="text" id="inTema" placeholder="Ex.: Mc 1.34 · aoristo"></label>
           <div class="notice" id="noKeyNotice" hidden>Sem chave do Groq, a página só grava o áudio. Os trechos ficam guardados e você transcreve depois, em Histórico. <button class="btn sm" id="btnKeyFromNotice">Colocar chave</button></div>
         </div>
       </div>
@@ -540,6 +540,7 @@ Regras:
 - originais: termos em grego/hebraico/aramaico/latim citados, transliterados, cada um com o idioma correto. Em aulas de língua, inclua também as regras gramaticais ensinadas em "conceitos".
 - perguntas_prova: perguntas que um professor faria sobre o conteúdo; inclua o que o professor disse que "cai na prova".
 - avisos: SOMENTE datas de prova, trabalhos ou leituras que o professor disse explicitamente; em "trecho" copie a frase exata da transcrição. Se não houver, deixe a lista vazia.
+- Aulas de grego/hebraico costumam ser leitura e análise de um texto bíblico. Identifique a passagem lida (pelo tema informado ou pelas palavras reconhecíveis) e use o texto original real dessa passagem para corrigir as palavras mal transcritas. Indique a referência em "referencias".
 - NUNCA invente: nada de datas, páginas, livros, exemplos ou textos bíblicos que não estejam na transcrição. Se um exemplo foi mal transcrito, reconstrua só se tiver certeza e indique "(reconstruído)".
 - Seja conciso: no máximo uns 8 pontos por tópico.
 Responda só com JSON neste formato: ${NOTES_SCHEMA}`;
@@ -583,6 +584,7 @@ Regras rígidas:
 - Use somente o que está nas anotações e na transcrição. NUNCA invente datas, provas, leituras, páginas, livros, exemplos em grego/hebraico ou textos bíblicos.
 - Não crie seção de avisos nem de pontos marcados se ela não estiver listada acima.
 - A transcrição automática erra palavras estrangeiras e termos técnicos; quando reconstruir algo, marque "(reconstruído)".
+- Se a aula foi leitura de um texto bíblico em grego/hebraico, comece "Conteúdo da aula" com o texto original da passagem, a tradução e a análise feita pelo professor, palavra por palavra.
 - Disciplina: ${s.disciplina}${lingua(s.disciplina)?"; termos estrangeiros desta aula são em "+lingua(s.disciplina):""}.
 - Omita seções vazias.`;
   const user=`Disciplina: ${s.disciplina}${s.tema?" | Tema: "+s.tema:""} | Data: ${dateStr(s.inicio)} | Duração: ${fmt(s.dur)}
