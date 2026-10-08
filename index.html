@@ -106,6 +106,7 @@ dl.terms dd small{color:var(--muted);font-family:var(--f-ui)}
 .md h1,.md h2,.md h3{font-family:var(--f-read);text-transform:none;letter-spacing:0;color:var(--fg)}
 .md h1{font-size:20px;margin:8px 0} .md h2{font-size:17.5px;margin:14px 0 6px} .md h3{font-size:15.5px;margin:12px 0 4px}
 .md p{margin:6px 0}
+.mdt{border-collapse:collapse;font-size:14px;margin:6px 0}.mdt th,.mdt td{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}.mdt th{background:var(--surface2)}
 
 /* dashboard */
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
@@ -193,6 +194,10 @@ dl.terms dd small{color:var(--muted);font-family:var(--f-ui)}
       <div class="row">
         <button class="btn sm" id="btnNotesNow">Atualizar anotações agora</button>
         <button class="btn sm" id="btnSummary">Gerar resumo final</button>
+      </div>
+      <div class="card" id="redoCard" hidden>
+        <div class="row"><label class="f" style="flex:1;min-width:0">Disciplina desta aula<select id="redoDisc"></select></label>
+        <button class="btn sm" id="btnRedo" style="align-self:flex-end">Refazer anotações e resumo</button></div>
       </div>
       <div id="notesOut"></div>
       <div class="card md notes" id="summaryCard" hidden>
@@ -297,7 +302,7 @@ if(!S.v2){S.v2=true;if(S.stt==="whisper-large-v3-turbo")S.stt=DEF.stt;if(S.chunk
 /* vocabulary hints so the transcriber and the notes keep each language straight */
 function lingua(disc){return /grego/i.test(disc)?"grego":/hebr/i.test(disc)?"hebraico":""}
 const VOCAB={
-  grego:"Grego bíblico (koiné) do Novo Testamento. Termos: lógos, cháris, pístis, agápe, dikaiosýne, ekklesía, kýrios, Christós, alfabeto grego, alfa, beta, gama, delta, ômega, acento agudo, espírito áspero, artigo, nominativo, genitivo, dativo, acusativo, vocativo, declinação, aoristo, presente, imperfeito, particípio, infinitivo, voz média, Septuaginta.",
+  grego:"Grego bíblico (koiné) do Novo Testamento. Termos: lógos, cháris, pístis, agápe, dikaiosýne, ekklesía, kýrios, Christós, alfabeto grego, alfa, beta, gama, delta, ômega, acento agudo, espírito áspero, artigo, nominativo, genitivo, dativo, acusativo, vocativo, declinação, aoristo, presente, imperfeito, particípio, infinitivo, voz média, Septuaginta, sujeito, verbo, complemento, complemento nominal, adjunto adnominal, adjunto adverbial, objeto direto, terceira declinação, pronome pessoal, kýrios, doûlos, autoû, ánthropos, theós, egó, hymâs, hýdor, hýdati, ebáptisa, apélysen.",
   hebraico:"Hebraico bíblico do Antigo Testamento. Termos: álef, bet, shevá, daguesh, qal, nifal, piel, pual, hifil, hitpael, qatal, yiqtol, waw consecutivo, construto, Elohim, YHWH, Torá, massoretas."};
 const LLM_FALLBACK=["openai/gpt-oss-120b","openai/gpt-oss-20b","qwen/qwen3.8-27b","moonshotai/kimi-k2-instruct"];
 function saveS(){try{localStorage.setItem("caderno.set",JSON.stringify(S))}catch(e){}}
@@ -340,7 +345,7 @@ async function groq(path,opts){
 async function chat(messages,{json=false,max=1500}={}){
   const models=[S.llm,...LLM_FALLBACK.filter(m=>m!==S.llm)];let d,lastErr;
   for(const model of models){
-    const body={model,messages,temperature:.2,max_tokens:max+(model.startsWith("openai/gpt-oss")?800:0)};
+    const body={model,messages,temperature:.1,max_tokens:max+(model.startsWith("openai/gpt-oss")?800:0)};
     if(model.startsWith("openai/gpt-oss"))body.reasoning_effort="low";
     if(json)body.response_format={type:"json_object"};
     try{d=await groq("/chat/completions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
@@ -369,7 +374,9 @@ async function labelSpeakers(text,s){
   const sys=`Você divide um trecho transcrito de uma aula de seminário teológico em falas e rotula quem fala.
 Disciplina desta aula: ${s.disciplina}.
 Rótulos permitidos: "Professor" (quem está lecionando), "Aluno" (perguntas ou comentários de estudantes), "Outro" (avisos de terceiros, leitura de outra pessoa etc.).
-Regras: não resuma, não corrija e não acrescente palavras; copie o texto exatamente, só dividindo onde muda quem fala. Na dúvida, use "Professor". Um trecho curto normalmente é uma única fala.
+Regras: não resuma e não acrescente nada; mantenha o texto, só dividindo onde muda quem fala.
+Única correção permitida: termos técnicos e palavras estrangeiras claramente mal transcritos (ex.: "genitinho" → "genitivo", "adominável"/"abdominal" → "adnominal", "sujeito do velho" → "sujeito do verbo", "Qiyos" → "kýrios"). Escreva palavras gregas/hebraicas transliteradas. Não mude mais nada.
+Respostas curtas de uma ou duas palavras logo após uma pergunta do professor costumam ser de "Aluno". Na dúvida, use "Professor".
 Responda só com JSON: {"falas":[{"quem":"Professor","texto":"..."}]}`;
   const out=await chat([{role:"system",content:sys},{role:"user",content:`Contexto anterior (já rotulado):\n${ctx||"(início da aula)"}\n\nTrecho novo:\n${text}`}],{json:true,max:Math.min(4000,Math.ceil(text.length/2)+300)});
   const f=(out.falas||[]).filter(x=>x&&x.texto).map(x=>({who:["Professor","Aluno","Outro"].includes(x.quem)?x.quem:"Professor",text:String(x.texto).trim()}));
@@ -512,7 +519,7 @@ $("#markSkip").onclick=()=>{$("#markSheet").hidden=true;renderAll()};
 
 /* ---------- notes ---------- */
 let notesBusy=false;
-const NOTES_SCHEMA=`{"tema_geral":"","topicos":[{"titulo":"","inicio":"mm:ss","pontos":[""]}],"conceitos":[{"termo":"","definicao":""}],"referencias":[{"ref":"Rm 5.12","contexto":""}],"originais":[{"termo":"","lingua":"grego|hebraico|aramaico|latim","sentido":""}],"autores":[{"nome":"","ideia":""}],"perguntas_prova":[""],"avisos":[""]}`;
+const NOTES_SCHEMA=`{"tema_geral":"","topicos":[{"titulo":"","inicio":"mm:ss","pontos":[""]}],"conceitos":[{"termo":"","definicao":""}],"referencias":[{"ref":"Rm 5.12","contexto":""}],"originais":[{"termo":"","lingua":"grego|hebraico|aramaico|latim","sentido":""}],"autores":[{"nome":"","ideia":""}],"perguntas_prova":[""],"avisos":[{"texto":"","trecho":"frase exata da transcrição"}]}`;
 async function autoNotes(){if(!rec||rec.paused||!S.key)return;const e=elapsed();
   if(e-rec.lastNotes>=S.notesMin*60&&cur.entries.some(x=>x.t>cur.notesUpTo)){rec.lastNotes=e;updateNotes(cur).catch(err=>console.warn(err))}}
 async function updateNotes(s,force){
@@ -532,7 +539,8 @@ Regras:
 - referencias: no formato brasileiro (Jo 3.16, 1Co 15.3-4). Só passagens realmente citadas.
 - originais: termos em grego/hebraico/aramaico/latim citados, transliterados, cada um com o idioma correto. Em aulas de língua, inclua também as regras gramaticais ensinadas em "conceitos".
 - perguntas_prova: perguntas que um professor faria sobre o conteúdo; inclua o que o professor disse que "cai na prova".
-- avisos: datas de prova, trabalhos, leituras pedidas.
+- avisos: SOMENTE datas de prova, trabalhos ou leituras que o professor disse explicitamente; em "trecho" copie a frase exata da transcrição. Se não houver, deixe a lista vazia.
+- NUNCA invente: nada de datas, páginas, livros, exemplos ou textos bíblicos que não estejam na transcrição. Se um exemplo foi mal transcrito, reconstrua só se tiver certeza e indique "(reconstruído)".
 - Seja conciso: no máximo uns 8 pontos por tópico.
 Responda só com JSON neste formato: ${NOTES_SCHEMA}`;
       const user=`Disciplina: ${s.disciplina}${s.tema?"\nTema informado: "+s.tema:""}
@@ -544,14 +552,19 @@ ${txt}`;
       let out;
       try{out=await chat([{role:"system",content:sys},{role:"user",content:user}],{json:true,max:2500})}
       catch(e){if(e instanceof RateErr){await sleep(e.retry*1000);out=await chat([{role:"system",content:sys},{role:"user",content:user}],{json:true,max:2500})}else throw e}
-      s.notes=normNotes(out);s.notesUpTo=batch[batch.length-1].t;
+      setTrWords(s);s.notes=normNotes(out);s.notesUpTo=batch[batch.length-1].t;
       await saveSession(s);if(cur&&cur.id===s.id){renderNotes();renderDash()}
     }
   }finally{notesBusy=false}}
+/* keep an "aviso" only when its quoted sentence really appears in the transcript */
+let _trWords=null;
+function backed(trecho){const w=String(trecho||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").match(/[a-z0-9]{3,}/g)||[];
+  if(w.length<3||!_trWords)return false;const hit=w.filter(x=>_trWords.has(x)).length;return hit/w.length>=.75}
+function setTrWords(s){_trWords=new Set((s.entries.map(e=>e.text).join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").match(/[a-z0-9]{3,}/g))||[])}
 function normNotes(o){o=o||{};const arr=v=>Array.isArray(v)?v:[];
   return{tema_geral:String(o.tema_geral||""),topicos:arr(o.topicos).map(t=>({titulo:String(t.titulo||""),inicio:String(t.inicio||""),pontos:arr(t.pontos).map(String)})).filter(t=>t.titulo),
     conceitos:arr(o.conceitos).filter(c=>c&&c.termo),referencias:arr(o.referencias).filter(r=>r&&r.ref),originais:arr(o.originais).filter(r=>r&&r.termo),
-    autores:arr(o.autores).filter(a=>a&&a.nome),perguntas_prova:arr(o.perguntas_prova).map(String).filter(Boolean),avisos:arr(o.avisos).map(String).filter(Boolean)}}
+    autores:arr(o.autores).filter(a=>a&&a.nome),perguntas_prova:arr(o.perguntas_prova).map(String).filter(Boolean),avisos:arr(o.avisos).map(a=>typeof a==="string"?{texto:a,trecho:""}:a).filter(a=>a&&a.texto&&backed(a.trecho)).map(a=>a.texto)}}
 
 async function finalSummary(s){
   const marks=s.marks.map(m=>`[${fmt(m.t)}] ${m.nota||"(sem nota)"} — trecho: "${m.trecho}"`).join("\n");
@@ -564,10 +577,14 @@ Formato Markdown, em português do Brasil:
 ## Conceitos e definições
 ## Textos bíblicos citados (com o motivo de cada um)
 ## Termos nos idiomas originais (se houver)
-## Pontos marcados pelo aluno (destaque cada um)
-## Para revisar / possíveis questões de prova
-## Avisos (só se houver)
-Não invente conteúdo que não está nas anotações ou na transcrição. Omita seções vazias.`;
+${s.marks.length?"## Pontos marcados pelo aluno (destaque cada um)\n":""}## Para revisar / possíveis questões de prova
+${s.notes&&s.notes.avisos&&s.notes.avisos.length?"## Avisos (copie exatamente os avisos das anotações)\n":""}
+Regras rígidas:
+- Use somente o que está nas anotações e na transcrição. NUNCA invente datas, provas, leituras, páginas, livros, exemplos em grego/hebraico ou textos bíblicos.
+- Não crie seção de avisos nem de pontos marcados se ela não estiver listada acima.
+- A transcrição automática erra palavras estrangeiras e termos técnicos; quando reconstruir algo, marque "(reconstruído)".
+- Disciplina: ${s.disciplina}${lingua(s.disciplina)?"; termos estrangeiros desta aula são em "+lingua(s.disciplina):""}.
+- Omita seções vazias.`;
   const user=`Disciplina: ${s.disciplina}${s.tema?" | Tema: "+s.tema:""} | Data: ${dateStr(s.inicio)} | Duração: ${fmt(s.dur)}
 Anotações (JSON): ${JSON.stringify(s.notes||{})}
 Trechos marcados:
@@ -582,8 +599,10 @@ ${trNote}`;
 /* ---------- markdown (small) ---------- */
 function md(src){const lines=esc(src).split("\n");let h="",list=null;
   const inline=t=>t.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*(?!\s)(.+?)\*/g,"$1<i>$2</i>");
-  const close=()=>{if(list){h+=`</${list}>`;list=null}};
+  const close=()=>{if(list){h+=list==="table"?"</table></div>":`</${list}>`;list=null}};
   for(const l of lines){let m;
+    if(/^\s*\|.*\|\s*$/.test(l)){if(/^\s*\|[\s:|-]+\|\s*$/.test(l))continue;const cells=l.trim().slice(1,-1).split("|").map(c=>inline(c.trim()));
+      if(list!=="table"){close();h+='<div style="overflow-x:auto"><table class="mdt">';list="table";h+=`<tr>${cells.map(c=>`<th>${c}</th>`).join("")}</tr>`}else h+=`<tr>${cells.map(c=>`<td>${c}</td>`).join("")}</tr>`;continue}
     if(m=l.match(/^(#{1,3})\s+(.*)/)){close();h+=`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`}
     else if(m=l.match(/^\s*[-*•]\s+(.*)/)){if(list!=="ul"){close();h+="<ul>";list="ul"}h+=`<li>${inline(m[1])}</li>`}
     else if(m=l.match(/^\s*\d+[.)]\s+(.*)/)){if(list!=="ol"){close();h+="<ol>";list="ol"}h+=`<li>${inline(m[1])}</li>`}
@@ -624,7 +643,9 @@ function renderNotes(){
     if(n.perguntas_prova.length)h+=`<div class="card notes"><h3>Para revisar</h3><ul>${n.perguntas_prova.map(p=>`<li>${esc(p)}</li>`).join("")}</ul></div>`;
     out.innerHTML=h||`<div class="empty">Ainda não há conteúdo suficiente.</div>`}
   const hasS=cur&&cur.resumo;$("#summaryCard").hidden=!hasS;if(hasS)$("#summaryOut").innerHTML=md(cur.resumo);
-  $("#exportRow").hidden=!cur||cur.status!=="encerrada";$("#btnCopy").disabled=!hasS}
+  $("#exportRow").hidden=!cur||cur.status!=="encerrada";
+  const rc=$("#redoCard");rc.hidden=!cur||!!rec||!S.key||!cur.entries.length;
+  if(!rc.hidden){const rd=$("#redoDisc");const opts=[...new Set([...S.disc,cur.disciplina])];rd.innerHTML=opts.map(d=>`<option>${esc(d)}</option>`).join("");rd.value=cur.disciplina}$("#btnCopy").disabled=!hasS}
 const COLORS={Professor:"var(--prof)",Aluno:"var(--aluno)",Outro:"var(--outro)",x:"var(--outro)"};
 const TL=["var(--accent)","var(--aluno)","var(--ok)","var(--warn)","var(--outro)","var(--rec)"];
 function renderDash(){
@@ -733,6 +754,10 @@ $("#btnSummary").onclick=async()=>{if(!cur)return;const b=$("#btnSummary");b.dis
   try{await updateNotes(cur,true);await finalSummary(cur);toast("Resumo pronto")}catch(e){toast(e instanceof RateErr?"Limite do minuto atingido. Tente em instantes.":e.message,3500)}
   b.textContent="Gerar resumo final";renderNotes()};
 window.addEventListener("online",()=>processQueue());
+$("#btnRedo").onclick=async()=>{if(!cur||rec)return;const b=$("#btnRedo");b.disabled=true;b.textContent="Refazendo…";
+  cur.disciplina=$("#redoDisc").value;cur.notes=null;cur.notesUpTo=-1;cur.resumo="";await saveCur(true);renderAll();
+  try{await updateNotes(cur,true);await finalSummary(cur);toast("Anotações e resumo refeitos")}catch(e){toast(e instanceof RateErr?"Limite do minuto atingido. Tente em instantes.":e.message,3500)}
+  b.disabled=false;b.textContent="Refazer anotações e resumo";renderAll()};
 
 /* ---------- boot ---------- */
 (async function(){
