@@ -196,8 +196,12 @@ dl.terms dd small{color:var(--muted);font-family:var(--f-ui)}
         <button class="btn sm" id="btnSummary">Gerar resumo final</button>
       </div>
       <div class="card" id="redoCard" hidden>
-        <div class="row"><label class="f" style="flex:1;min-width:0">Disciplina desta aula<select id="redoDisc"></select></label>
-        <button class="btn sm" id="btnRedo" style="align-self:flex-end">Refazer anotações e resumo</button></div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+        <label class="f">Disciplina desta aula<select id="redoDisc"></select></label>
+        <label class="f">Texto do dia (ex.: Mc 1.34)<input type="text" id="redoTema"></label>
+        <div class="row"><button class="btn sm primary" id="btnFull">Retranscrever a aula inteira</button>
+        <button class="btn sm" id="btnRedo">Refazer só anotações e resumo</button></div>
+        <div class="muted" id="fullInfo" style="font-size:13px"></div></div>
       </div>
       <div id="notesOut"></div>
       <div class="card md notes" id="summaryCard" hidden>
@@ -443,7 +447,7 @@ async function startRec(){
   cur=s;await saveCur(true);
   rec={s,stream,mime,acc:0,since:Date.now(),paused:false,seq:0,part:1,finishing:false};
   // full-length recording, saved every 5 s so nothing is lost if the page closes
-  rec.full=new MediaRecorder(stream,{mimeType:mime||undefined,audioBitsPerSecond:32000});
+  rec.full=new MediaRecorder(stream,{mimeType:mime||undefined,audioBitsPerSecond:24000});
   rec.full.ondataavailable=e=>{if(e.data&&e.data.size)dbPut("audio",{sid:s.id,part:rec?rec.part:1,seq:rec?rec.seq++:0,blob:e.data}).catch(console.warn)};
   rec.full.start(5000);
   // level meter
@@ -495,6 +499,7 @@ async function stopRec(){
 async function finishAfterQueue(){
   const s=cur;rec=null;updateControls();$("#startCard").hidden=false;
   if(!S.key){setStatus("Áudio salvo. Transcreva depois em Histórico.","");renderAll();return}
+  try{await fullPass(s);s.notes=null;s.notesUpTo=-1}catch(e){console.warn(e);toast("A revisão completa falhou ("+e.message+"). Ficou a transcrição ao vivo.",4500)}
   try{setStatus("Gerando as anotações finais…","");await updateNotes(s,true);
     setStatus("Escrevendo o resumo da aula…","");await finalSummary(s);
     setStatus("Pronto. Resumo e áudio disponíveis em Anotações.","");toast("Resumo pronto");switchTab("notas")}
@@ -598,6 +603,61 @@ ${trNote}`;
   catch(e){if(e instanceof RateErr){await sleep(e.retry*1000);out=await chat([{role:"system",content:sys},{role:"user",content:user}],{max:2500})}else throw e}
   s.resumo=out.trim();await saveSession(s);if(cur&&cur.id===s.id){renderNotes()}}
 
+/* ---------- full pass: whole audio in one request, then line-by-line review ---------- */
+async function waitRate(fn,label){
+  for(let i=0;i<6;i++){try{return await fn()}catch(e){
+    if(!(e instanceof RateErr))throw e;const sec=Math.ceil(e.retry);
+    setStatus(`${label}: limite gratuito atingido, retomando em ${sec} s…`,"");await sleep(sec*1000)}}
+  throw new Error("limite gratuito do Groq por hora atingido. Tente de novo mais tarde em Anotações.")}
+async function fullPass(s){
+  const rows=(await dbBySid("audio",s.id)).sort((a,b)=>a.part-b.part||a.seq-b.seq);
+  if(!rows.length)throw new Error("não há áudio salvo desta aula");
+  const mime=(s.mime||rows[0].blob.type||"audio/webm").split(";")[0];
+  const blob=new Blob(rows.map(r=>r.blob),{type:mime});
+  if(blob.size>24.5e6)throw new Error("o áudio passa de 25 MB, o limite do plano gratuito");
+  const ext=mime.includes("ogg")?"ogg":mime.includes("mp4")?"m4a":"webm";
+  const v=VOCAB[lingua(s.disciplina)]||"";
+  const prompt=(`Aula de ${s.disciplina}${s.tema?" ("+s.tema+")":""}, em português, num seminário presbiteriano. ${v}`).slice(0,700);
+  setStatus("Retranscrevendo o áudio completo…","");
+  const j=await waitRate(async()=>{const fd=new FormData();fd.append("file",new File([blob],"aula."+ext,{type:mime}));
+    fd.append("model",S.stt);fd.append("language","pt");fd.append("response_format","verbose_json");fd.append("temperature","0");fd.append("prompt",prompt);
+    return groq("/audio/transcriptions",{method:"POST",body:fd})},"Transcrição");
+  const segs=(j.segments||[]).filter(g=>{const t=(g.text||"").trim();if(!t)return false;
+    if((g.no_speech_prob??0)>.6&&(g.avg_logprob??0)<-.8)return false;if((g.compression_ratio??1)>2.6)return false;return !HALLU.some(re=>re.test(t))});
+  if(!segs.length)throw new Error("o transcritor não reconheceu fala no áudio");
+  // group segments into lines of ~20 s
+  const lines=[];for(const g of segs){const L=lines[lines.length-1];
+    if(L&&g.start-L.t<20&&L.text.length<350)L.text+=" "+g.text.trim();else lines.push({t:g.start,text:g.text.trim()})}
+  // review in batches
+  const out=[];let i=0,batchNo=0;const total=Math.ceil(lines.reduce((a,l)=>a+l.text.length,0)/3200)||1;
+  while(i<lines.length){
+    const batch=[];let len=0;while(i<lines.length&&(len<3200||!batch.length)){batch.push(lines[i]);len+=lines[i].text.length;i++}
+    batchNo++;setStatus(`Revisando a transcrição (${batchNo}/${total})…`,"");
+    let fixed=null;
+    try{fixed=await waitRate(()=>reviewLines(batch,s,out.slice(-2)),"Revisão")}catch(e){if(/limite/.test(e.message))throw e;console.warn(e)}
+    batch.forEach((l,k)=>{const f=fixed&&fixed[k];out.push({t:l.t,who:f?f.who:"Professor",text:f?f.text:l.text})});
+  }
+  if(!s.rawEntries)s.rawEntries=s.entries;
+  s.entries=out;s.fullPass=true;await saveSession(s);if(cur&&cur.id===s.id){renderTranscript();renderDash()}}
+async function reviewLines(batch,s,ctx){
+  const L=lingua(s.disciplina);
+  const sys=`Você revisa a transcrição automática de uma aula de ${s.disciplina} num seminário presbiteriano.
+O transcritor ouviu tudo como português, então palavras ${L?"em "+L:"estrangeiras"} e termos técnicos saíram deformados (ex.: "terapêusem por ús cacuïs" = ἐθεράπευσεν πολλοὺς κακῶς; "Qiyos" = κύριος; "Ao du" = αὐτοῦ; "genitinho" = genitivo; "adominável"/"abdominal" = adnominal; "sujeito do velho" = sujeito do verbo).
+Para cada linha:
+- Corrija o que foi claramente mal reconhecido. Quando o professor lê ou cita ${L||"grego/hebraico"}, escreva no alfabeto original (${L==="hebraico"?"hebraico":"grego"}).
+- Se reconhecer a passagem bíblica lida${s.tema?" (o aluno informou: "+s.tema+")":""}, use o texto original real dela.
+- Mantenha o português como foi falado; só arrume pontuação. Não resuma, não acrescente frases, não invente. Se não souber o que foi dito, deixe como está.
+- quem: "Professor", ou "Aluno" para respostas curtas a perguntas do professor e perguntas de alunos.
+Responda só JSON com exatamente as mesmas linhas, na mesma ordem: {"linhas":[{"i":0,"quem":"Professor","texto":"..."}]}`;
+  const user=`${ctx.length?"Linhas anteriores, já revisadas (contexto):\n"+ctx.map(c=>c.who+": "+c.text).join("\n")+"\n\n":""}Linhas para revisar:\n${batch.map((l,k)=>`[${k}] ${l.text}`).join("\n")}`;
+  const len=batch.reduce((a,l)=>a+l.text.length,0);
+  const o=await chat([{role:"system",content:sys},{role:"user",content:user}],{json:true,max:Math.min(6000,Math.ceil(len/1.6)+400)});
+  const arr=(o.linhas||[]);const res=[];
+  for(let k=0;k<batch.length;k++){const f=arr.find(x=>+x.i===k)||arr[k];
+    if(!f||!f.texto||String(f.texto).length<batch[k].text.length*.4){res.push(null);continue}
+    res.push({who:["Professor","Aluno","Outro"].includes(f.quem)?f.quem:"Professor",text:String(f.texto).trim()})}
+  return res}
+
 /* ---------- markdown (small) ---------- */
 function md(src){const lines=esc(src).split("\n");let h="",list=null;
   const inline=t=>t.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*(?!\s)(.+?)\*/g,"$1<i>$2</i>");
@@ -646,8 +706,9 @@ function renderNotes(){
     out.innerHTML=h||`<div class="empty">Ainda não há conteúdo suficiente.</div>`}
   const hasS=cur&&cur.resumo;$("#summaryCard").hidden=!hasS;if(hasS)$("#summaryOut").innerHTML=md(cur.resumo);
   $("#exportRow").hidden=!cur||cur.status!=="encerrada";
-  const rc=$("#redoCard");rc.hidden=!cur||!!rec||!S.key||!cur.entries.length;
-  if(!rc.hidden){const rd=$("#redoDisc");const opts=[...new Set([...S.disc,cur.disciplina])];rd.innerHTML=opts.map(d=>`<option>${esc(d)}</option>`).join("");rd.value=cur.disciplina}$("#btnCopy").disabled=!hasS}
+  const rc=$("#redoCard");rc.hidden=!cur||!!rec||!S.key||cur.status!=="encerrada";
+  if(!rc.hidden){const rd=$("#redoDisc");const opts=[...new Set([...S.disc,cur.disciplina])];rd.innerHTML=opts.map(d=>`<option>${esc(d)}</option>`).join("");rd.value=cur.disciplina;$("#redoTema").value=cur.tema||"";
+    $("#fullInfo").textContent=cur.fullPass?"Esta aula já foi retranscrita com o áudio completo e revisada.":"Retranscreve o áudio completo de uma vez e revisa o grego e os termos técnicos. Leva alguns minutos."}$("#btnCopy").disabled=!hasS}
 const COLORS={Professor:"var(--prof)",Aluno:"var(--aluno)",Outro:"var(--outro)",x:"var(--outro)"};
 const TL=["var(--accent)","var(--aluno)","var(--ok)","var(--warn)","var(--outro)","var(--rec)"];
 function renderDash(){
@@ -757,9 +818,17 @@ $("#btnSummary").onclick=async()=>{if(!cur)return;const b=$("#btnSummary");b.dis
   b.textContent="Gerar resumo final";renderNotes()};
 window.addEventListener("online",()=>processQueue());
 $("#btnRedo").onclick=async()=>{if(!cur||rec)return;const b=$("#btnRedo");b.disabled=true;b.textContent="Refazendo…";
-  cur.disciplina=$("#redoDisc").value;cur.notes=null;cur.notesUpTo=-1;cur.resumo="";await saveCur(true);renderAll();
+  cur.disciplina=$("#redoDisc").value;cur.tema=$("#redoTema").value.trim();cur.notes=null;cur.notesUpTo=-1;cur.resumo="";await saveCur(true);renderAll();
   try{await updateNotes(cur,true);await finalSummary(cur);toast("Anotações e resumo refeitos")}catch(e){toast(e instanceof RateErr?"Limite do minuto atingido. Tente em instantes.":e.message,3500)}
   b.disabled=false;b.textContent="Refazer anotações e resumo";renderAll()};
+
+$("#btnFull").onclick=async()=>{if(!cur||rec)return;const b=$("#btnFull");b.disabled=true;b.textContent="Retranscrevendo…";
+  cur.disciplina=$("#redoDisc").value;cur.tema=$("#redoTema").value.trim();await saveCur(true);switchTab("aula");
+  try{await fullPass(cur);cur.notes=null;cur.notesUpTo=-1;cur.resumo="";await saveCur(true);renderAll();
+    setStatus("Gerando anotações…","");await updateNotes(cur,true);setStatus("Escrevendo o resumo…","");await finalSummary(cur);
+    setStatus("Pronto. Transcrição revisada, anotações e resumo refeitos.","");toast("Aula retranscrita")}
+  catch(e){setStatus("Falhou: "+e.message,"");toast(e.message,4500)}
+  b.disabled=false;b.textContent="Retranscrever a aula inteira";renderAll()};
 
 /* ---------- boot ---------- */
 (async function(){
