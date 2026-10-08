@@ -1,195 +1,732 @@
-<!DOCTYPE html>
-
-<!--
-	This is free and unencumbered software released into the public domain.
-
-	Anyone is free to copy, modify, publish, use, compile, sell, or
-	distribute this software, either in source code form or as a compiled
-	binary, for any purpose, commercial or non-commercial, and by any
-	means.
-
-	In jurisdictions that recognize copyright laws, the author or authors
-	of this software dedicate any and all copyright interest in the
-	software to the public domain. We make this dedication for the benefit
-	of the public at large and to the detriment of our heirs and
-	successors. We intend this dedication to be an overt act of
-	relinquishment in perpetuity of all present and future rights to this
-	software under copyright law.
-
-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-	EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-	MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-	IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
-	OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
-	ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-	OTHER DEALINGS IN THE SOFTWARE.
-
-	For more information, please refer to <http://unlicense.org>
--->
-
-<html lang="en">
-
+<!doctype html>
+<html lang="pt-BR">
 <head>
-	<meta charset="utf-8">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#11151c">
+<title>Caderno de Aula</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Literata:opsz,wght@7..72,400;7..72,600&display=swap">
+<style>
+/* Layout: one-column phone app — status bar on top, scrolling page, controls + tab bar pinned at the bottom.
+   Palette: night-class ink with gilt-edge brass accent (dark first); cool paper in light mode. */
+:root{
+  --bg:#11151c; --surface:#181e27; --surface2:#1f2732; --line:#2a3443;
+  --fg:#e6e9ee; --muted:#8d98aa; --accent:#d9b26a; --accent-ink:#1a1408;
+  --rec:#e5534b; --ok:#5fb88a; --warn:#e0a84a;
+  --prof:#d9b26a; --aluno:#7fb3d5; --outro:#a7b0bf;
+  --f-ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-read:"Literata",Georgia,"Times New Roman",serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"Roboto Mono",monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f2f3f5; --surface:#ffffff; --surface2:#eceef2; --line:#d9dde4;
+    --fg:#19202a; --muted:#5b6677; --accent:#94681a; --accent-ink:#ffffff;
+    --rec:#c9362e; --ok:#2f8a5c; --warn:#a86d0c;
+    --prof:#94681a; --aluno:#2d6a97; --outro:#5b6677;
+    color-scheme:light;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 var(--f-ui);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
 
-	<title>Bandersnatch Interactive Player</title>
-	<meta name="description"
-		content="Stand-alone open-source interactive HTML player for Black Mirror - Bandersnatch" />
-	<meta name="keywords" content="Bandersnatch,Bandersnatch Interactive Player,Interactive Player,watch," />
-	<script src="assets/bandersnatch.js"></script>
-	<script src="assets/choices/ru.js"></script>
-	<script src="assets/choices/en.js"></script>
-	<script src="assets/choices/fr.js"></script>
-	<script src="assets/SegmentMap.js"></script>
-	<script src="assets/scripts.js"></script>
-	<script>
-		// keep localizable strings out of scripts.js
-		function askReset() {
-			if (confirm('Are you sure you want to reset all choices, breadcrumbs, and watched scenes?'))
-				reset();
-		}
-	</script>
+.app{display:flex;flex-direction:column;height:100%;padding-top:env(safe-area-inset-top,0px)}
+header.top{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--bg)}
+.brand{font:600 15px/1.2 var(--f-read);letter-spacing:.01em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand small{display:block;font:400 12px var(--f-ui);color:var(--muted)}
+.clock{font:500 18px var(--f-mono);font-variant-numeric:tabular-nums}
+.meter{width:46px;height:8px;border-radius:4px;background:var(--surface2);overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--ok);transition:width .15s}
+.iconbtn{background:none;border:1px solid var(--line);border-radius:10px;width:38px;height:38px;display:grid;place-items:center}
+.iconbtn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8}
 
-	<link rel="stylesheet" type="text/css" href="assets/styles.css">
+.status{font-size:12.5px;color:var(--muted);padding:6px 16px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;min-height:30px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.dot.live{background:var(--rec);animation:pulse 1.4s infinite}
+.dot.pause{background:var(--warn)}
+@keyframes pulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.dot.live{animation:none}}
+
+main{flex:1;overflow-y:auto;padding:16px;padding-bottom:24px}
+.view{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+
+h2{font:600 19px/1.3 var(--f-read);margin:0;text-wrap:balance}
+h3{font:600 12px var(--f-ui);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 8px}
+.muted{color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+label.f{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+input[type=text],input[type=password],input[type=number],select,textarea{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;color:var(--fg)}
+textarea{min-height:70px;resize:vertical}
+
+.btn{border:1px solid var(--line);background:var(--surface2);border-radius:12px;padding:10px 14px;font-weight:500;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn.danger{color:var(--rec);border-color:color-mix(in srgb,var(--rec) 45%,var(--line))}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.sm{padding:6px 10px;font-size:13px;border-radius:10px}
+
+/* transcript */
+.tr{display:flex;flex-direction:column;gap:14px;font:16px/1.65 var(--f-read)}
+.fala{display:grid;grid-template-columns:auto 1fr;gap:4px 10px}
+.fala .t{font:12px var(--f-mono);color:var(--muted);padding-top:4px;font-variant-numeric:tabular-nums}
+.fala .q{font:600 11.5px var(--f-ui);text-transform:uppercase;letter-spacing:.07em}
+.fala .x{grid-column:2;min-width:0;overflow-wrap:anywhere}
+.fala.marked .x{background:color-mix(in srgb,var(--accent) 16%,transparent);border-radius:6px;padding:2px 6px;margin-left:-6px}
+.q.Professor{color:var(--prof)} .q.Aluno{color:var(--aluno)} .q.Outro,.q.x{color:var(--outro)}
+.typing{font:13px var(--f-ui);color:var(--muted);font-style:italic}
+
+.empty{border:1px dashed var(--line);border-radius:14px;padding:20px;color:var(--muted);text-align:left}
+.empty b{color:var(--fg)}
+.empty ol{margin:8px 0 0;padding-left:20px}
+
+/* notes */
+.notes{font:15.5px/1.6 var(--f-read)}
+.notes ul{margin:0;padding-left:18px}
+.notes li{margin:3px 0}
+.topic{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+.topic:first-child{border:0;padding:0;margin:0}
+.topic .tt{display:flex;gap:8px;align-items:baseline;font-weight:600}
+.topic .tt span{font:12px var(--f-mono);color:var(--muted);font-weight:400}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--surface2);border-radius:999px;padding:3px 10px;font:500 13px var(--f-ui)}
+.chip.ref{font-family:var(--f-read)}
+dl.terms{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 12px}
+dl.terms dt{font-weight:600}
+dl.terms dd{margin:0;min-width:0}
+dl.terms dd small{color:var(--muted);font-family:var(--f-ui)}
+.aviso{border-left:3px solid var(--warn);padding:4px 10px;margin:4px 0}
+.md h1,.md h2,.md h3{font-family:var(--f-read);text-transform:none;letter-spacing:0;color:var(--fg)}
+.md h1{font-size:20px;margin:8px 0} .md h2{font-size:17.5px;margin:14px 0 6px} .md h3{font-size:15.5px;margin:12px 0 4px}
+.md p{margin:6px 0}
+
+/* dashboard */
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:560px){.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.tile b{display:block;font:500 22px var(--f-mono);font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--muted)}
+.bar{display:grid;grid-template-columns:92px 1fr 44px;gap:8px;align-items:center;font-size:13px;margin:6px 0}
+.bar .track{height:10px;background:var(--surface2);border-radius:5px;overflow:hidden}
+.bar .track i{display:block;height:100%;border-radius:5px}
+.bar em{font:12px var(--f-mono);font-style:normal;text-align:right;color:var(--muted)}
+.tl{position:relative;height:34px;background:var(--surface2);border-radius:8px;overflow:hidden}
+.tl i{position:absolute;top:0;bottom:0;border-right:2px solid var(--bg)}
+.tl b{position:absolute;top:-2px;width:2px;height:38px;background:var(--fg)}
+.tl-legend{display:flex;flex-direction:column;gap:4px;margin-top:8px;font-size:13px}
+.tl-legend span{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.markline{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:14px;padding:6px 0;border-top:1px solid var(--line)}
+.markline:first-of-type{border:0}
+.markline .t{font:12px var(--f-mono);color:var(--accent)}
+
+/* history */
+.hist{display:flex;flex-direction:column;gap:8px}
+.hitem{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}
+.hitem .n{font-weight:600}
+.hitem small{color:var(--muted)}
+.pill{font:500 11px var(--f-ui);border-radius:999px;padding:2px 8px;border:1px solid var(--line);color:var(--muted)}
+.pill.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 50%,var(--line))}
+
+/* bottom */
+.dock{border-top:1px solid var(--line);background:var(--bg);padding-bottom:env(safe-area-inset-bottom,0px)}
+.controls{display:flex;gap:8px;padding:10px 16px}
+.controls .btn{flex:1;padding:12px 8px}
+.recbtn{background:var(--rec);color:#fff;border-color:transparent}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line)}
+.tabs button{background:none;border:0;padding:9px 0 10px;font-size:12px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px}
+.tabs button svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7}
+.tabs button[aria-selected=true]{color:var(--accent)}
+
+.sheet{position:fixed;inset:0;background:color-mix(in srgb,#000 55%,transparent);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.sheet .panel{background:var(--surface);border-radius:18px 18px 0 0;width:100%;max-width:720px;max-height:88%;overflow-y:auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px;border:1px solid var(--line)}
+.toast{position:fixed;left:16px;right:16px;bottom:150px;margin:auto;max-width:420px;background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:12px;font-size:14px;z-index:30;text-align:center}
+.notice{border:1px solid color-mix(in srgb,var(--warn) 50%,var(--line));background:color-mix(in srgb,var(--warn) 10%,var(--surface));border-radius:12px;padding:10px 12px;font-size:14px}
+</style>
 </head>
-
 <body>
-	<div>
-		<div id="c">
-			<section role="banner">
-				<div id="file-selector">
-					<div class="file-area">
-						<div class="contact">
-							<div>
-								<span class="default">You can select translation of choices: </span>
-								<select id="choice-translation">
-									<option value="ru">Russian</option>
-									<option value="en" selected>English</option>
-									<option value="fr">French</option>
-								</select>
-								<br>
-								This player remembers your choices and watch history: <a
-								href="javascript:askReset()">Reset all</a>
-							</div>
-							<p>
-								Authors:
-								<a href="https://github.com/joric/bandersnatch/">Original version</a> - <a
-									href="https://github.com/joric/">joric</a> |
-								Web page, subtitles - <a href="https://github.com/mehotkhan">Mehotkhan</a> |
-								Many fixes, improvements, and everything else - <a
-									href="https://github.com/CyberShadow">CyberShadow</a>						
-							</p>
-						</div>
-						<input id="fileinput" type="file">
-						<div class="file-dummy">
-							<h2>Bandersnatch Interactive Player</h2>
-							<span class="default">Select Bandersnatch video file ( 5:12:14 ) </span>
-							<span class="success">Great, your file is selected</span>
-							<ul class="file-tips">
-								<li>This player is known to work only on Google Chrome or Chromium.</li>
-								<li>Obtain the Bandersnatch video file (duration should be 5:12:14).<br>
-									Tested with <code>Black.Mirror.Bandersnatch.2018.720p.WEB-DL.x264.DUAL.mkv</code>,<br>
-									<code>Black.Mirror.Bandersnatch.2018.MULTi.1080p.NF.WEB-DL.x264-NSP.mkv</code>,<br>
-									<code>Black.Mirror.Bandersnatch.2018.MULTi.720p.NF.WEB-DL.x264-NSP.mkv</code>.
-									
-								</li>
-								<li>Drag it on top of this box (or click here to select it).</li>
-								<li>Subtitles in many languages are available. If you the french audio you can chose French Forced Subtitle</li>
-								<li>To change the subtitle:
-									<ol>
-										<li>Right click on the video</li>
-										<li>Enable "Show controls"</li>
-										<li>Click on the <span class="menu-item"></span> in the bottom-right</li>
-										<li>Select the desired subtitle</li>
-										<li>You can now hide the player controls in the same way as step 1-2.</li>
-									</ol>
-								</li>
-								<li>Note: do not use the "full screen" button in the video player if you enable "Show
-									controls".
-									Choice selection interface will not be visible if you do this.</li>
-							</ul>
+<div class="app">
+  <header class="top">
+    <div class="brand" id="brand">Caderno de Aula<small id="brandSub">Nenhuma aula aberta</small></div>
+    <div class="meter" aria-hidden="true"><i id="meter"></i></div>
+    <div class="clock" id="clock">00:00</div>
+    <button class="iconbtn" id="btnSettings" aria-label="Configurações">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+  <div class="status"><span class="dot" id="dot"></span><span id="statusText">Pronto para gravar</span></div>
 
-							<ul class="controls-tips">
-								<h6>Keyboard controls</h6>
-								<li><kbd>F</kbd> - Toggle fullscreen</li>
-								<li><kbd>R</kbd> - Restart video</li>
-								<li><kbd>→</kbd> / <kbd>←</kbd> - Jump to the next / previous segment (or interaction
-									zone)</li>
-								<li><kbd>↑</kbd> / <kbd>↓</kbd> - Speed up / slow down playback</li>
-								<li><kbd>Space</kbd> - Toggle play and pause</li>
-							</ul>
-						</div>
-					</div>
+  <main id="main">
+    <!-- AULA -->
+    <section class="view" id="v-aula">
+      <div class="card" id="startCard">
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <h2>Nova aula</h2>
+          <label class="f">Disciplina<select id="selDisc"></select></label>
+          <label class="f">Tema da aula (opcional)<input type="text" id="inTema" placeholder="Ex.: Justificação em Romanos 3–5"></label>
+          <div class="notice" id="noKeyNotice" hidden>Sem chave do Groq, a página só grava o áudio. Os trechos ficam guardados e você transcreve depois, em Histórico. <button class="btn sm" id="btnKeyFromNotice">Colocar chave</button></div>
+        </div>
+      </div>
+      <div id="trWrap">
+        <div class="tr" id="tr"></div>
+        <div class="typing" id="typing" hidden></div>
+      </div>
+      <div class="empty" id="trEmpty">
+        <b>Como funciona</b>
+        <ol>
+          <li>Escolha a disciplina e toque em <b>Gravar</b>. Deixe a tela ligada nesta página.</li>
+          <li>A cada 30 s a fala aparece aqui, separada entre Professor e Aluno.</li>
+          <li>Toque em <b>Marcar</b> quando algo for importante.</li>
+          <li>As anotações se atualizam sozinhas a cada 5 min. Ao encerrar, sai o resumo final e o áudio completo fica para baixar.</li>
+        </ol>
+      </div>
+    </section>
 
-				</div>
-				<div id="wrapper-video">
-					<video id="video" preload="metadata">
-						<source id="video-source" src="">
-						<track label="English" kind="subtitles" srclang="en"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.WEBRip.x264-NoGRP.vtt" default>
-						<track label="Chinese" kind="subtitles" srclang="en"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.2160p.4K.WEB.x265.10bit.AAC5.1.chs.vtt" default>
-						<track label="Chs+Eng" kind="subtitles" srclang="en"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.2160p.4K.WEB.x265.10bit.AAC5.1.chs+eng.vtt" default>
-						<track label="Persian" kind="subtitles" srclang="en"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.WEBRip.x264-NoGRP-persian-vtt-sharp.vtt">
-						<track label="Arabic" kind="subtitles" srclang="en"
-							src="subtitle/Black.Mirror.Bandersnatch.2018-arabic.vtt">
-						<track label="Spanish" kind="subtitles" srclang="en"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.720p.espanish.vtt">
-						<track label="Hebrew" kind="subtitles" srclang="en"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.Web-05.12.14-NF-UniHebSubs-hebrew.vtt">
-						<track label="Portuguese" kind="subtitles" srclang="en"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.WEBRip.720p.portuguese.vtt">
-						<track label="Greek" kind="subtitles" srclang="en"
-							src="subtitle/black-mirror-bandersnatch-2018-nf-web-dl-720p-greek.vtt">
-						<track label="Turkish" kind="subtitles" srclang="en"
-							src="subtitle/BlackMirror.Bandersnatch-Turkish.vtt">
-						<track label="Polish" kind="subtitles" srclang="en"
-							src="subtitle/Czarne.lustro_.Bandersnatch.WEBRip.Netflix.pl.vtt">
-						<track label="Indonesian" kind="subtitles" srclang="en"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.WEBRip.x264-NoGRP-Indonesian-vtt-sharp.vtt">
-						<track label="Russian" kind="subtitles" srclang="ru"
-							src="subtitle/BlackMirror.Bandersnatch-russian.vtt">
-						<track label="French" kind="subtitles" srclang="fr"
-							src="subtitle/Black.Mirror_.Bandersnatch.French.WEBRip.Netflix.vtt">
-						<track label="French Forced" kind="subtitles" srclang="de"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.MULTi.1080p.NF.WEB-DL.x264-NSP_track9_[fre].vtt">
+    <!-- ANOTAÇÕES -->
+    <section class="view" id="v-notas" hidden>
+      <div class="row">
+        <button class="btn sm" id="btnNotesNow">Atualizar anotações agora</button>
+        <button class="btn sm" id="btnSummary">Gerar resumo final</button>
+      </div>
+      <div id="notesOut"></div>
+      <div class="card md notes" id="summaryCard" hidden>
+        <h3>Resumo da aula</h3>
+        <div id="summaryOut"></div>
+      </div>
+      <div class="row" id="exportRow" hidden>
+        <button class="btn sm" id="btnCopy">Copiar resumo</button>
+        <button class="btn sm" id="btnMd">Baixar texto (.md)</button>
+        <button class="btn sm" id="btnAudio">Baixar áudio</button>
+      </div>
+    </section>
 
-						<track label="Hungarian" kind="subtitles" srclang="hu"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.720p.WEBRip.XviD.AC3-FGT-Hungarian.vtt">
+    <!-- PAINEL -->
+    <section class="view" id="v-painel" hidden>
+      <div id="dashOut"></div>
+    </section>
 
-						<track label="Korean" kind="subtitles" srclang="kr"
-							src="subtitle/[SubtitleTools.com] Black.Mirror.Bandersnatch.2018.REPACK.1080p.WEB.X264-DEFLATE.Korean.vtt">
-						<track label="German" kind="subtitles" srclang="de"
-							src="subtitle/Black.Mirror.Bandersnatch.2018.WEBRip.Netflix.German.vtt">
-					</video>
-					<div class="controls">
-						<div id="choiceCaption"></div>
-						<div id="progress"></div>
-						<div class="buttons">
-							<ul id="choices"></ul>
-							<ul id="interactionZones"></ul>
-							<ul id="nextSegments"></ul>
-							<ul id="nextSegment"></ul>
-						</div>
-					</div>
-				</div>
+    <!-- HISTÓRICO -->
+    <section class="view" id="v-hist" hidden>
+      <h2>Aulas gravadas</h2>
+      <div class="hist" id="histOut"></div>
+    </section>
+  </main>
 
-		</div>
-		</section>
+  <div class="dock">
+    <div class="controls" id="controls">
+      <button class="btn recbtn" id="btnRec">● Gravar</button>
+      <button class="btn" id="btnMark" disabled>☆ Marcar</button>
+      <button class="btn" id="btnPause" disabled>Pausar</button>
+      <button class="btn danger" id="btnStop" disabled>Encerrar</button>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-v="aula" aria-selected="true"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Aula</button>
+      <button role="tab" data-v="notas" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 11h7M9 15h7M9 7h4"/></svg>Anotações</button>
+      <button role="tab" data-v="painel" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Painel</button>
+      <button role="tab" data-v="hist" aria-selected="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Histórico</button>
+    </nav>
+  </div>
+</div>
 
+<!-- Settings sheet -->
+<div class="sheet" id="sheet" hidden>
+  <div class="panel">
+    <h2>Configurações</h2>
+    <p class="muted" id="setMsg" style="margin:0">A transcrição e as anotações usam o plano gratuito do Groq. Crie a chave em console.groq.com/keys e cole abaixo. Ela fica salva só neste celular.</p>
+    <label class="f">Chave do Groq<input type="password" id="setKey" autocomplete="off" placeholder="gsk_..."></label>
+    <div class="row"><button class="btn sm" id="btnTestKey">Testar chave</button><span class="muted" id="keyResult"></span></div>
+    <label class="f">Disciplinas (uma por linha)<textarea id="setDisc"></textarea></label>
+    <label class="f"><span><input type="checkbox" id="setDiar"> Separar falas (Professor / Aluno)</span></label>
+    <div class="row">
+      <label class="f" style="flex:1">Anotações a cada (min)<input type="number" id="setNotesMin" min="2" max="30"></label>
+      <label class="f" style="flex:1">Trecho de áudio (s)<input type="number" id="setChunk" min="15" max="120"></label>
+    </div>
+    <label class="f">Sensibilidade a silêncio (0,005 a 0,05)<input type="number" id="setSil" step="0.001" min="0.001" max="0.1"></label>
+    <label class="f">Modelo de transcrição<input type="text" id="setStt"></label>
+    <label class="f">Modelo de texto (anotações)<input type="text" id="setLlm"></label>
+    <div class="row"><button class="btn primary" id="btnSaveSet">Salvar</button><button class="btn" id="btnCloseSet">Fechar</button></div>
+  </div>
+</div>
 
-	</div>
-</body>
+<!-- Confirm sheet -->
+<div class="sheet" id="confirm" hidden>
+  <div class="panel">
+    <h2 id="cfTitle">Confirmar</h2>
+    <p class="muted" id="cfText" style="margin:0"></p>
+    <div class="row"><button class="btn danger" id="cfYes">Confirmar</button><button class="btn" id="cfNo">Cancelar</button></div>
+  </div>
+</div>
+
+<!-- Mark note sheet -->
+<div class="sheet" id="markSheet" hidden>
+  <div class="panel">
+    <h2>Trecho marcado</h2>
+    <label class="f">Nota rápida (opcional)<input type="text" id="markNote" placeholder="Ex.: cai na prova"></label>
+    <div class="row"><button class="btn primary" id="markSave">Salvar</button><button class="btn" id="markSkip">Sem nota</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
 
 <script>
-	var select = document.getElementById('choice-translation');
-	select.addEventListener('change',(e)=>{
-	translated_choices = window[select.value];
-	console.log(select.value);
-	momentsBySegment = switch_choices();
-	})
-</script>
+"use strict";
+/* ---------- utils ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function fmt(sec){sec=Math.max(0,Math.round(sec||0));const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;const p=n=>String(n).padStart(2,"0");return h?`${h}:${p(m)}:${p(s)}`:`${p(m)}:${p(s)}`}
+function toast(msg,ms=2600){const t=$("#toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,ms)}
+function setStatus(txt,state){$("#statusText").textContent=txt;const d=$("#dot");d.className="dot"+(state?" "+state:"")}
+const dateStr=ts=>new Date(ts).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"});
+const timeStr=ts=>new Date(ts).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
 
+/* ---------- settings ---------- */
+const DEF={key:"",stt:"whisper-large-v3-turbo",llm:"llama-3.3-70b-versatile",chunk:30,notesMin:5,sil:0.012,diar:true,
+  disc:["Teologia do Novo Testamento","Hebraico","Português 3","Outra"]};
+let S={...DEF};
+try{const r=JSON.parse(localStorage.getItem("caderno.set")||"null");if(r)S={...DEF,...r}}catch(e){}
+function saveS(){try{localStorage.setItem("caderno.set",JSON.stringify(S))}catch(e){}}
+
+/* ---------- IndexedDB ---------- */
+const P=req=>new Promise((res,rej)=>{req.onsuccess=()=>res(req.result);req.onerror=()=>rej(req.error)});
+const DB=new Promise((res,rej)=>{const r=indexedDB.open("caderno-aula",1);
+  r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore("sessions",{keyPath:"id"});
+    d.createObjectStore("audio",{keyPath:"k",autoIncrement:true}).createIndex("sid","sid");
+    d.createObjectStore("chunks",{keyPath:"k",autoIncrement:true}).createIndex("sid","sid");};
+  r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+async function os(name,mode="readonly"){const d=await DB;return d.transaction(name,mode).objectStore(name)}
+const dbPut=async(n,v)=>P((await os(n,"readwrite")).put(v));
+const dbGet=async(n,k)=>P((await os(n)).get(k));
+const dbAll=async n=>P((await os(n)).getAll());
+const dbDel=async(n,k)=>P((await os(n,"readwrite")).delete(k));
+const dbBySid=async(n,sid)=>P((await os(n)).index("sid").getAll(sid));
+const dbKeysBySid=async(n,sid)=>P((await os(n)).index("sid").getAllKeys(sid));
+
+/* ---------- state ---------- */
+let cur=null;          // session being viewed
+let rec=null;          // live recording state
+let saveTimer=null;
+function newSession(disc,tema){return{id:"a"+Date.now(),disciplina:disc,tema:tema||"",inicio:Date.now(),dur:0,status:"gravando",
+  entries:[],marks:[],notes:null,notesUpTo:-1,resumo:"",parts:0}}
+function saveCur(now){const s=cur;if(!s)return;clearTimeout(saveTimer);
+  const go=()=>dbPut("sessions",structuredClone(s)).catch(e=>console.warn(e));
+  if(now)return go();saveTimer=setTimeout(go,1200)}
+async function saveSession(s){if(cur&&s.id===cur.id){cur=s;return saveCur(true)}return dbPut("sessions",structuredClone(s))}
+
+/* ---------- Groq ---------- */
+const API="https://api.groq.com/openai/v1";
+class RateErr extends Error{constructor(sec){super("limite");this.retry=sec}}
+async function groq(path,opts){
+  const r=await fetch(API+path,{...opts,headers:{...(opts.headers||{}),Authorization:"Bearer "+S.key}});
+  if(r.status===429){const ra=parseFloat(r.headers.get("retry-after"))||20;throw new RateErr(Math.min(ra,120))}
+  if(r.status===401)throw new Error("Chave do Groq inválida. Confira em Configurações.");
+  if(!r.ok){let m="";try{m=(await r.json()).error?.message||""}catch(e){}throw new Error(`Groq ${r.status}: ${m}`.trim())}
+  return r.json()}
+async function chat(messages,{json=false,max=1500}={}){
+  const body={model:S.llm,messages,temperature:.2,max_tokens:max};
+  if(json)body.response_format={type:"json_object"};
+  const d=await groq("/chat/completions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const txt=d.choices?.[0]?.message?.content||"";
+  if(!json)return txt;
+  try{return JSON.parse(txt)}catch(e){const m=txt.match(/\{[\s\S]*\}/);if(m)return JSON.parse(m[0]);throw e}}
+
+/* Whisper often invents these on silence/noise in Portuguese */
+const HALLU=[/amara\.org/i,/legendas? (pela|por)/i,/obrigad[oa] por assistir/i,/inscreva-se/i,/^\s*(tchau[, ]*)+\.?\s*$/i,/^\s*obrigad[oa]\.?\s*$/i,/legenda adriana zanotto/i,/^\s*\.+\s*$/];
+function cleanSegments(json){
+  const segs=json.segments||[{text:json.text||"",no_speech_prob:0,avg_logprob:0}];
+  return segs.filter(s=>{const t=(s.text||"").trim();if(!t)return false;
+    if((s.no_speech_prob??0)>.6&&(s.avg_logprob??0)<-.8)return false;
+    if((s.compression_ratio??1)>2.6)return false;
+    return !HALLU.some(re=>re.test(t))}).map(s=>s.text.trim()).join(" ").replace(/\s+/g," ").trim()}
+
+function sttPrompt(s){const tail=s.entries.slice(-3).map(e=>e.text).join(" ").slice(-180);
+  return (`Aula de ${s.disciplina} num seminário presbiteriano. ${tail}`).slice(0,400)}
+
+async function labelSpeakers(text,s){
+  const ctx=s.entries.slice(-4).map(e=>`${e.who}: ${e.text}`).join("\n").slice(-1200);
+  const sys=`Você divide um trecho transcrito de uma aula de seminário teológico em falas e rotula quem fala.
+Rótulos permitidos: "Professor" (quem está lecionando), "Aluno" (perguntas ou comentários de estudantes), "Outro" (avisos de terceiros, leitura de outra pessoa etc.).
+Regras: não resuma, não corrija e não acrescente palavras; copie o texto exatamente, só dividindo onde muda quem fala. Na dúvida, use "Professor". Um trecho curto normalmente é uma única fala.
+Responda só com JSON: {"falas":[{"quem":"Professor","texto":"..."}]}`;
+  const out=await chat([{role:"system",content:sys},{role:"user",content:`Contexto anterior (já rotulado):\n${ctx||"(início da aula)"}\n\nTrecho novo:\n${text}`}],{json:true,max:Math.min(4000,Math.ceil(text.length/2)+300)});
+  const f=(out.falas||[]).filter(x=>x&&x.texto).map(x=>({who:["Professor","Aluno","Outro"].includes(x.quem)?x.quem:"Professor",text:String(x.texto).trim()}));
+  const len=f.reduce((a,x)=>a+x.text.length,0);
+  if(!f.length||len<text.length*.7)throw new Error("rotulagem incompleta");
+  return f}
+
+/* ---------- transcription queue ---------- */
+const queue=[];let qBusy=false;
+async function enqueueChunk(c){const k=await dbPut("chunks",c);queue.push(k);processQueue()}
+async function processQueue(){
+  if(qBusy)return;qBusy=true;let fails=0;
+  try{
+    while(queue.length){
+      if(!S.key){showTyping("");break}
+      if(!navigator.onLine){showTyping("Sem internet: os trechos ficam guardados e serão transcritos quando a conexão voltar.");await sleep(8000);continue}
+      const k=queue[0];const c=await dbGet("chunks",k);
+      if(!c){queue.shift();continue}
+      try{
+        showTyping(`Transcrevendo o trecho de ${fmt(c.t0)}…`);
+        await transcribeChunk(c);await dbDel("chunks",k);queue.shift();fails=0;
+      }catch(e){
+        if(e instanceof RateErr){showTyping(`Limite gratuito por minuto atingido. Retomando em ${Math.round(e.retry)} s…`);await sleep(e.retry*1000);continue}
+        fails++;console.warn(e);showTyping(`Falha ao transcrever (${e.message}). Tentando de novo…`);
+        if(/inválida/.test(e.message)||fails>=3){queue.shift();fails=0;toast("Um trecho ficou pendente. Dá para tentar de novo em Histórico.")}
+        await sleep(6000);
+      }
+    }
+  }finally{qBusy=false;showTyping("");renderHist();
+    if(rec&&rec.finishing&&!queue.length)finishAfterQueue()}}
+async function transcribeChunk(c){
+  let s=(cur&&cur.id===c.sid)?cur:await dbGet("sessions",c.sid);if(!s)return;
+  if(c.peak<S.sil)return; // silence: nothing to send
+  const ext=c.mime.includes("ogg")?"ogg":c.mime.includes("mp4")?"m4a":"webm";
+  const fd=new FormData();
+  fd.append("file",new File([c.blob],"trecho."+ext,{type:c.mime.split(";")[0]}));
+  fd.append("model",S.stt);fd.append("language","pt");fd.append("response_format","verbose_json");
+  fd.append("temperature","0");fd.append("prompt",sttPrompt(s));
+  const j=await groq("/audio/transcriptions",{method:"POST",body:fd});
+  const text=cleanSegments(j);if(!text)return;
+  let falas=[{who:S.diar?"Professor":"x",text}];
+  if(S.diar){try{falas=await labelSpeakers(text,s)}catch(e){if(e instanceof RateErr){await sleep(e.retry*1000);try{falas=await labelSpeakers(text,s)}catch(_){}}}}
+  const total=falas.reduce((a,f)=>a+f.text.length,0)||1;let acc=0;
+  s=(cur&&cur.id===c.sid)?cur:s; // pick up latest
+  for(const f of falas){s.entries.push({t:c.t0+(acc/total)*(c.dur||S.chunk),who:f.who,text:f.text});acc+=f.text.length}
+  s.entries.sort((a,b)=>a.t-b.t);
+  await saveSession(s);if(cur&&cur.id===s.id){renderTranscript();renderDash()}}
+
+function showTyping(t){const el=$("#typing");el.textContent=t;el.hidden=!t}
+
+/* ---------- recording ---------- */
+const MIMES=["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus","audio/mp4"];
+const pickMime=()=>MIMES.find(m=>window.MediaRecorder&&MediaRecorder.isTypeSupported(m))||"";
+function elapsed(){if(!rec)return cur?cur.dur:0;return(rec.acc+(rec.paused?0:Date.now()-rec.since))/1000}
+
+async function startRec(){
+  if(!window.isSecureContext){toast("Abra a página por um endereço https para usar o microfone.",4000);return}
+  if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){toast("Este navegador não grava áudio. Use o Chrome.",4000);return}
+  let stream;
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:true,autoGainControl:true,channelCount:1}})}
+  catch(e){toast("Permita o acesso ao microfone para gravar.",4000);return}
+  const mime=pickMime();
+  const s=newSession($("#selDisc").value,$("#inTema").value.trim());s.mime=mime;s.parts=1;
+  cur=s;await saveCur(true);
+  rec={s,stream,mime,acc:0,since:Date.now(),paused:false,seq:0,part:1,finishing:false};
+  // full-length recording, saved every 5 s so nothing is lost if the page closes
+  rec.full=new MediaRecorder(stream,{mimeType:mime||undefined,audioBitsPerSecond:32000});
+  rec.full.ondataavailable=e=>{if(e.data&&e.data.size)dbPut("audio",{sid:s.id,part:rec?rec.part:1,seq:rec?rec.seq++:0,blob:e.data}).catch(console.warn)};
+  rec.full.start(5000);
+  // level meter
+  try{rec.ac=new (window.AudioContext||window.webkitAudioContext)();const src=rec.ac.createMediaStreamSource(stream);
+    rec.an=rec.ac.createAnalyser();rec.an.fftSize=2048;src.connect(rec.an);rec.buf=new Float32Array(rec.an.fftSize)}catch(e){}
+  rec.chunk=newChunk();
+  rec.rot=setInterval(rotateChunk,S.chunk*1000);
+  rec.tick=setInterval(tick,250);
+  rec.notesTick=setInterval(autoNotes,30000);rec.lastNotes=0;
+  await wake();
+  $("#startCard").hidden=true;renderAll();updateControls();
+  setStatus(S.key?"Gravando · transcrição a cada "+S.chunk+" s":"Gravando só o áudio (sem chave do Groq)","live");
+}
+function newChunk(){
+  const r=new MediaRecorder(rec.stream,{mimeType:rec.mime||undefined,audioBitsPerSecond:32000});
+  const parts=[];const info={t0:elapsed(),peak:0,startAt:Date.now()};const sid=rec.s.id;const mime=r.mimeType||rec.mime||"audio/webm";
+  r.ondataavailable=e=>{if(e.data&&e.data.size)parts.push(e.data)};
+  r.onstop=()=>{const blob=new Blob(parts,{type:mime});if(blob.size<1000)return;
+    enqueueChunk({sid,t0:info.t0,dur:(Date.now()-info.startAt)/1000,peak:info.peak,mime,blob})};
+  r.start();r.info=info;return r}
+function rotateChunk(){if(!rec||rec.paused)return;const old=rec.chunk;rec.chunk=newChunk();try{old.stop()}catch(e){}}
+function tick(){
+  $("#clock").textContent=fmt(elapsed());
+  if(rec&&rec.an&&!rec.paused){rec.an.getFloatTimeDomainData(rec.buf);let sum=0;for(const v of rec.buf)sum+=v*v;const rms=Math.sqrt(sum/rec.buf.length);
+    if(rec.chunk)rec.chunk.info.peak=Math.max(rec.chunk.info.peak,rms);
+    const pct=Math.min(100,Math.sqrt(rms/0.15)*100);const m=$("#meter");m.style.width=pct+"%";m.style.background=rms<S.sil?"var(--muted)":"var(--ok)"}
+}
+function pauseRec(){
+  if(!rec)return;
+  if(!rec.paused){rec.acc+=Date.now()-rec.since;rec.paused=true;try{rec.chunk.stop()}catch(e){}rec.chunk=null;try{rec.full.pause()}catch(e){}
+    setStatus("Pausado (intervalo)","pause");$("#btnPause").textContent="Continuar";$("#meter").style.width="0"}
+  else{rec.since=Date.now();rec.paused=false;try{rec.full.resume()}catch(e){}rec.chunk=newChunk();
+    setStatus("Gravando","live");$("#btnPause").textContent="Pausar"}
+}
+async function stopRec(){
+  if(!rec)return;const r=rec;
+  if(!r.paused){r.acc+=Date.now()-r.since;r.paused=true}
+  clearInterval(r.rot);clearInterval(r.tick);clearInterval(r.notesTick);
+  try{if(r.chunk)r.chunk.stop()}catch(e){}
+  await new Promise(res=>{if(r.full.state==="inactive")return res();r.full.onstop=()=>setTimeout(res,300);try{r.full.stop()}catch(e){res()}});
+  r.stream.getTracks().forEach(t=>t.stop());try{r.ac&&r.ac.close()}catch(e){}
+  releaseWake();
+  cur.dur=r.acc/1000;cur.status="encerrada";await saveCur(true);
+  r.finishing=true;updateControls();$("#meter").style.width="0";
+  setStatus("Aula encerrada. Terminando a transcrição…","");
+  await sleep(600);
+  if(!queue.length&&!qBusy)finishAfterQueue();
+}
+async function finishAfterQueue(){
+  const s=cur;rec=null;updateControls();$("#startCard").hidden=false;
+  if(!S.key){setStatus("Áudio salvo. Transcreva depois em Histórico.","");renderAll();return}
+  try{setStatus("Gerando as anotações finais…","");await updateNotes(s,true);
+    setStatus("Escrevendo o resumo da aula…","");await finalSummary(s);
+    setStatus("Pronto. Resumo e áudio disponíveis em Anotações.","");toast("Resumo pronto");switchTab("notas")}
+  catch(e){setStatus("Áudio salvo. O resumo falhou: "+e.message,"")}
+  renderAll()}
+
+/* screen wake lock */
+async function wake(){try{if("wakeLock" in navigator){rec.wl=await navigator.wakeLock.request("screen")}}catch(e){}}
+function releaseWake(){try{rec&&rec.wl&&rec.wl.release()}catch(e){}}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&rec&&!rec.finishing){wake();
+  if(rec.hiddenAt&&Date.now()-rec.hiddenAt>5000)toast("A gravação continuou. Mantenha esta página aberta até encerrar.",3500);rec.hiddenAt=0}
+  else if(rec)rec.hiddenAt=Date.now()});
+window.addEventListener("beforeunload",e=>{if(rec&&!rec.finishing){e.preventDefault();e.returnValue=""}});
+
+/* ---------- marks ---------- */
+function addMark(){if(!rec||!cur)return;const t=elapsed();
+  const lastTxt=cur.entries.length?cur.entries[cur.entries.length-1].text.slice(-160):"";
+  cur.marks.push({t,nota:"",trecho:lastTxt});saveCur();toast("Marcado em "+fmt(t));
+  $("#markNote").value="";$("#markSheet").hidden=false;setTimeout(()=>$("#markNote").focus(),50)}
+$("#markSave").onclick=()=>{const m=cur&&cur.marks[cur.marks.length-1];if(m){m.nota=$("#markNote").value.trim();saveCur()}$("#markSheet").hidden=true;renderAll()};
+$("#markSkip").onclick=()=>{$("#markSheet").hidden=true;renderAll()};
+
+/* ---------- notes ---------- */
+let notesBusy=false;
+const NOTES_SCHEMA=`{"tema_geral":"","topicos":[{"titulo":"","inicio":"mm:ss","pontos":[""]}],"conceitos":[{"termo":"","definicao":""}],"referencias":[{"ref":"Rm 5.12","contexto":""}],"originais":[{"termo":"","lingua":"grego|hebraico|aramaico|latim","sentido":""}],"autores":[{"nome":"","ideia":""}],"perguntas_prova":[""],"avisos":[""]}`;
+async function autoNotes(){if(!rec||rec.paused||!S.key)return;const e=elapsed();
+  if(e-rec.lastNotes>=S.notesMin*60&&cur.entries.some(x=>x.t>cur.notesUpTo)){rec.lastNotes=e;updateNotes(cur).catch(err=>console.warn(err))}}
+async function updateNotes(s,force){
+  if(notesBusy&&!force)return;notesBusy=true;
+  try{
+    let fresh=s.entries.filter(x=>x.t>s.notesUpTo);if(!fresh.length)return;
+    while(fresh.length){
+      let txt="",used=0;
+      for(const x of fresh){const line=`[${fmt(x.t)}] ${x.who==="x"?"":x.who+": "}${x.text}\n`;if(txt.length+line.length>14000&&used)break;txt+=line;used++}
+      const batch=fresh.slice(0,used);fresh=fresh.slice(used);
+      const sys=`Você é o caderno de anotações de um estudante de Bacharel em Teologia (seminário presbiteriano, tradição reformada).
+Atualize as anotações da aula com o trecho novo da transcrição. Mantenha tudo o que já existe, acrescente o novo e corrija erros óbvios de transcrição (nomes, termos teológicos, palavras gregas e hebraicas).
+Regras:
+- Português do Brasil, frases curtas, sem enrolação. Registre o que o professor ensinou, não opiniões suas.
+- topicos: siga a ordem da aula; "inicio" é o horário do trecho em que o tópico começou. Junte pontos repetidos.
+- referencias: no formato brasileiro (Jo 3.16, 1Co 15.3-4). Só passagens realmente citadas.
+- originais: termos em grego/hebraico/aramaico/latim citados, transliterados.
+- perguntas_prova: perguntas que um professor faria sobre o conteúdo; inclua o que o professor disse que "cai na prova".
+- avisos: datas de prova, trabalhos, leituras pedidas.
+- Seja conciso: no máximo uns 8 pontos por tópico.
+Responda só com JSON neste formato: ${NOTES_SCHEMA}`;
+      const user=`Disciplina: ${s.disciplina}${s.tema?"\nTema informado: "+s.tema:""}
+Anotações atuais (JSON):
+${JSON.stringify(s.notes||{})}
+
+Trecho novo da transcrição:
+${txt}`;
+      let out;
+      try{out=await chat([{role:"system",content:sys},{role:"user",content:user}],{json:true,max:2500})}
+      catch(e){if(e instanceof RateErr){await sleep(e.retry*1000);out=await chat([{role:"system",content:sys},{role:"user",content:user}],{json:true,max:2500})}else throw e}
+      s.notes=normNotes(out);s.notesUpTo=batch[batch.length-1].t;
+      await saveSession(s);if(cur&&cur.id===s.id){renderNotes();renderDash()}
+    }
+  }finally{notesBusy=false}}
+function normNotes(o){o=o||{};const arr=v=>Array.isArray(v)?v:[];
+  return{tema_geral:String(o.tema_geral||""),topicos:arr(o.topicos).map(t=>({titulo:String(t.titulo||""),inicio:String(t.inicio||""),pontos:arr(t.pontos).map(String)})).filter(t=>t.titulo),
+    conceitos:arr(o.conceitos).filter(c=>c&&c.termo),referencias:arr(o.referencias).filter(r=>r&&r.ref),originais:arr(o.originais).filter(r=>r&&r.termo),
+    autores:arr(o.autores).filter(a=>a&&a.nome),perguntas_prova:arr(o.perguntas_prova).map(String).filter(Boolean),avisos:arr(o.avisos).map(String).filter(Boolean)}}
+
+async function finalSummary(s){
+  const marks=s.marks.map(m=>`[${fmt(m.t)}] ${m.nota||"(sem nota)"} — trecho: "${m.trecho}"`).join("\n");
+  let tr=s.entries.map(x=>`[${fmt(x.t)}] ${x.who==="x"?"":x.who+": "}${x.text}`).join("\n");
+  const trNote=tr.length>16000?"(transcrição completa omitida por ser longa; use as anotações)":tr;
+  const sys=`Você escreve o resumo de estudo de uma aula de seminário teológico (presbiteriano) para o próprio aluno revisar.
+Formato Markdown, em português do Brasil:
+## Ideia central (2–3 frases)
+## Conteúdo da aula (por tópico, na ordem; bullets objetivos)
+## Conceitos e definições
+## Textos bíblicos citados (com o motivo de cada um)
+## Termos nos idiomas originais (se houver)
+## Pontos marcados pelo aluno (destaque cada um)
+## Para revisar / possíveis questões de prova
+## Avisos (só se houver)
+Não invente conteúdo que não está nas anotações ou na transcrição. Omita seções vazias.`;
+  const user=`Disciplina: ${s.disciplina}${s.tema?" | Tema: "+s.tema:""} | Data: ${dateStr(s.inicio)} | Duração: ${fmt(s.dur)}
+Anotações (JSON): ${JSON.stringify(s.notes||{})}
+Trechos marcados:
+${marks||"(nenhum)"}
+Transcrição:
+${trNote}`;
+  let out;
+  try{out=await chat([{role:"system",content:sys},{role:"user",content:user}],{max:2500})}
+  catch(e){if(e instanceof RateErr){await sleep(e.retry*1000);out=await chat([{role:"system",content:sys},{role:"user",content:user}],{max:2500})}else throw e}
+  s.resumo=out.trim();await saveSession(s);if(cur&&cur.id===s.id){renderNotes()}}
+
+/* ---------- markdown (small) ---------- */
+function md(src){const lines=esc(src).split("\n");let h="",list=null;
+  const inline=t=>t.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/(^|[^*])\*(?!\s)(.+?)\*/g,"$1<i>$2</i>");
+  const close=()=>{if(list){h+=`</${list}>`;list=null}};
+  for(const l of lines){let m;
+    if(m=l.match(/^(#{1,3})\s+(.*)/)){close();h+=`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`}
+    else if(m=l.match(/^\s*[-*•]\s+(.*)/)){if(list!=="ul"){close();h+="<ul>";list="ul"}h+=`<li>${inline(m[1])}</li>`}
+    else if(m=l.match(/^\s*\d+[.)]\s+(.*)/)){if(list!=="ol"){close();h+="<ol>";list="ol"}h+=`<li>${inline(m[1])}</li>`}
+    else if(!l.trim()){close()}
+    else{close();h+=`<p>${inline(l)}</p>`}}
+  close();return h}
+
+/* ---------- render ---------- */
+function renderAll(){renderHeader();renderTranscript();renderNotes();renderDash();renderHist();updateControls()}
+function renderHeader(){
+  $("#brandSub").textContent=cur?`${cur.disciplina} · ${dateStr(cur.inicio)}${cur.tema?" · "+cur.tema:""}`:"Nenhuma aula aberta";
+  $("#clock").textContent=fmt(elapsed());
+  $("#noKeyNotice").hidden=!!S.key}
+function renderTranscript(){
+  const box=$("#tr");const m=$("#main");const nearBottom=m.scrollHeight-m.scrollTop-m.clientHeight<140;
+  const es=cur?cur.entries:[];$("#trEmpty").hidden=!!es.length||!!rec;
+  // merge consecutive lines from the same speaker
+  const groups=[];for(const e of es){const g=groups[groups.length-1];if(g&&g.who===e.who&&e.t-g.end<90){g.text+=" "+e.text;g.end=e.t}else groups.push({who:e.who,t:e.t,end:e.t,text:e.text})}
+  const marks=cur?cur.marks:[];
+  box.innerHTML=groups.map(g=>{const mk=marks.some(k=>k.t>=g.t-5&&k.t<=g.end+S.chunk+5);
+    const who=g.who==="x"?"":g.who;
+    return `<div class="fala${mk?" marked":""}"><span class="t">${fmt(g.t)}</span><span class="q ${esc(g.who)}">${esc(who)}${mk?" ★":""}</span><div class="x">${esc(g.text)}</div></div>`}).join("");
+  if(rec&&nearBottom)m.scrollTop=m.scrollHeight}
+function renderNotes(){
+  const out=$("#notesOut");const n=cur&&cur.notes;
+  $("#btnNotesNow").disabled=!cur||!S.key;$("#btnSummary").disabled=!cur||!S.key||!cur.entries.length;
+  if(!cur){out.innerHTML=`<div class="empty">Grave uma aula ou abra uma do Histórico para ver as anotações.</div>`}
+  else if(!n){out.innerHTML=`<div class="empty">As anotações aparecem aqui a cada ${S.notesMin} minutos de aula. Toque em <b>Atualizar anotações agora</b> para gerar já.</div>`}
+  else{
+    let h="";
+    if(n.tema_geral)h+=`<div class="card notes"><h3>Tema</h3><div>${esc(n.tema_geral)}</div></div>`;
+    if(n.avisos.length)h+=`<div class="card notes"><h3>Avisos</h3>${n.avisos.map(a=>`<div class="aviso">${esc(a)}</div>`).join("")}</div>`;
+    if(n.topicos.length)h+=`<div class="card notes"><h3>Tópicos da aula</h3>${n.topicos.map(t=>`<div class="topic"><div class="tt">${esc(t.titulo)}${t.inicio?`<span>${esc(t.inicio)}</span>`:""}</div><ul>${t.pontos.map(p=>`<li>${esc(p)}</li>`).join("")}</ul></div>`).join("")}</div>`;
+    if(n.conceitos.length)h+=`<div class="card notes"><h3>Conceitos</h3><dl class="terms">${n.conceitos.map(c=>`<dt>${esc(c.termo)}</dt><dd>${esc(c.definicao)}</dd>`).join("")}</dl></div>`;
+    if(n.referencias.length)h+=`<div class="card notes"><h3>Textos bíblicos</h3><ul>${n.referencias.map(r=>`<li><b>${esc(r.ref)}</b>${r.contexto?" — "+esc(r.contexto):""}</li>`).join("")}</ul></div>`;
+    if(n.originais.length)h+=`<div class="card notes"><h3>Idiomas originais</h3><dl class="terms">${n.originais.map(o=>`<dt>${esc(o.termo)}</dt><dd>${esc(o.sentido)} <small>${esc(o.lingua||"")}</small></dd>`).join("")}</dl></div>`;
+    if(n.autores.length)h+=`<div class="card notes"><h3>Autores citados</h3><dl class="terms">${n.autores.map(a=>`<dt>${esc(a.nome)}</dt><dd>${esc(a.ideia)}</dd>`).join("")}</dl></div>`;
+    if(n.perguntas_prova.length)h+=`<div class="card notes"><h3>Para revisar</h3><ul>${n.perguntas_prova.map(p=>`<li>${esc(p)}</li>`).join("")}</ul></div>`;
+    out.innerHTML=h||`<div class="empty">Ainda não há conteúdo suficiente.</div>`}
+  const hasS=cur&&cur.resumo;$("#summaryCard").hidden=!hasS;if(hasS)$("#summaryOut").innerHTML=md(cur.resumo);
+  $("#exportRow").hidden=!cur||cur.status!=="encerrada";$("#btnCopy").disabled=!hasS}
+const COLORS={Professor:"var(--prof)",Aluno:"var(--aluno)",Outro:"var(--outro)",x:"var(--outro)"};
+const TL=["var(--accent)","var(--aluno)","var(--ok)","var(--warn)","var(--outro)","var(--rec)"];
+function renderDash(){
+  const out=$("#dashOut");
+  if(!cur){out.innerHTML=`<div class="empty">O painel mostra a aula aberta: tempo, quem falou, linha do tempo dos tópicos, trechos marcados e referências.</div>`;return}
+  const es=cur.entries,n=cur.notes||normNotes({}),dur=Math.max(elapsed(),1);
+  const words=es.reduce((a,e)=>a+e.text.split(/\s+/).length,0);
+  const per={};es.forEach(e=>{per[e.who]=(per[e.who]||0)+e.text.split(/\s+/).length});
+  const tot=Object.values(per).reduce((a,b)=>a+b,0)||1;
+  let h=`<div class="tiles">
+    <div class="tile"><b>${fmt(dur)}</b><span>duração</span></div>
+    <div class="tile"><b>${words.toLocaleString("pt-BR")}</b><span>palavras</span></div>
+    <div class="tile"><b>${cur.marks.length}</b><span>trechos marcados</span></div>
+    <div class="tile"><b>${n.referencias.length}</b><span>textos bíblicos</span></div></div>`;
+  if(Object.keys(per).length&&S.diar){h+=`<div class="card"><h3>Quem falou</h3>${Object.entries(per).sort((a,b)=>b[1]-a[1]).map(([w,c])=>{const p=Math.round(c/tot*100);
+    return `<div class="bar"><span>${w==="x"?"Sem rótulo":esc(w)}</span><div class="track"><i style="width:${p}%;background:${COLORS[w]||"var(--outro)"}"></i></div><em>${p}%</em></div>`}).join("")}</div>`}
+  const tps=n.topicos.map(t=>{const m=String(t.inicio).match(/(?:(\d+):)?(\d+):(\d+)/);const s=m?(+(m[1]||0))*3600+(+m[2])*60+(+m[3]):0;return{...t,s}}).sort((a,b)=>a.s-b.s);
+  if(tps.length){h+=`<div class="card"><h3>Linha do tempo</h3><div class="tl">${tps.map((t,i)=>{const a=Math.min(t.s/dur,1),b=i+1<tps.length?Math.min(tps[i+1].s/dur,1):1;
+      return `<i style="left:${a*100}%;width:${Math.max(b-a,.005)*100}%;background:${TL[i%TL.length]}" title="${esc(t.titulo)}"></i>`}).join("")}${cur.marks.map(m=>`<b style="left:${Math.min(m.t/dur,1)*100}%"></b>`).join("")}</div>
+    <div class="tl-legend">${tps.map((t,i)=>`<div><span style="background:${TL[i%TL.length]}"></span><span style="font-family:var(--f-mono);font-size:12px;color:var(--muted);width:auto;height:auto;background:none">${fmt(t.s)}</span> ${esc(t.titulo)}</div>`).join("")}</div>
+    ${cur.marks.length?`<div class="muted" style="font-size:12px;margin-top:6px">Traços verticais = seus trechos marcados.</div>`:""}</div>`}
+  if(cur.marks.length)h+=`<div class="card"><h3>Trechos marcados</h3>${cur.marks.map(m=>`<div class="markline"><span class="t">${fmt(m.t)}</span><div>${m.nota?`<b>${esc(m.nota)}</b><br>`:""}<span class="muted">${esc(m.trecho||"")}</span></div></div>`).join("")}</div>`;
+  if(n.referencias.length)h+=`<div class="card"><h3>Textos bíblicos</h3><div class="chips">${n.referencias.map(r=>`<span class="chip ref">${esc(r.ref)}</span>`).join("")}</div></div>`;
+  if(n.originais.length)h+=`<div class="card"><h3>Vocabulário original</h3><div class="chips">${n.originais.map(o=>`<span class="chip">${esc(o.termo)}</span>`).join("")}</div></div>`;
+  if(n.avisos.length)h+=`<div class="card"><h3>Avisos</h3>${n.avisos.map(a=>`<div class="aviso">${esc(a)}</div>`).join("")}</div>`;
+  if(!es.length&&!tps.length)h+=`<div class="empty">Os gráficos aparecem conforme a aula é transcrita.</div>`;
+  out.innerHTML=h}
+async function renderHist(){
+  const out=$("#histOut");let all=[];try{all=await dbAll("sessions")}catch(e){}
+  all.sort((a,b)=>b.inicio-a.inicio);
+  if(!all.length){out.innerHTML=`<div class="empty">Nenhuma aula gravada ainda.</div>`;return}
+  let pend={};try{(await dbAll("chunks")).forEach(c=>{pend[c.sid]=(pend[c.sid]||0)+1})}catch(e){}
+  out.innerHTML=all.map(s=>{const p=pend[s.id]||0;const live=rec&&rec.s.id===s.id;
+    return `<div class="card hitem"><div><div class="n">${esc(s.disciplina)}${s.tema?" · "+esc(s.tema):""}</div>
+      <small>${dateStr(s.inicio)} · ${timeStr(s.inicio)} · ${fmt(s.dur)}</small>
+      <div class="row" style="margin-top:6px">${live?`<span class="pill warn">gravando</span>`:""}${s.resumo?`<span class="pill">com resumo</span>`:""}${p?`<span class="pill warn">${p} trecho(s) pendente(s)</span>`:""}</div></div>
+      <div class="row" style="flex-direction:column;align-items:stretch">
+        <button class="btn sm" data-open="${s.id}">Abrir</button>
+        ${p&&!live?`<button class="btn sm" data-retry="${s.id}">Transcrever</button>`:""}
+        ${live?"":`<button class="btn sm danger" data-del="${s.id}">Apagar</button>`}
+      </div></div>`}).join("")}
+$("#histOut").addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.open){if(rec&&rec.s.id!==b.dataset.open){toast("Encerre a aula atual antes de abrir outra.");return}
+    cur=rec?rec.s:await dbGet("sessions",b.dataset.open);renderAll();switchTab("notas")}
+  if(b.dataset.retry){if(!S.key){openSettings("Cole a chave do Groq para transcrever os trechos guardados.");return}
+    const sid=b.dataset.retry;cur=await dbGet("sessions",sid);renderAll();switchTab("aula");
+    const ks=(await dbKeysBySid("chunks",sid)).sort((a,b)=>a-b);ks.forEach(k=>{if(!queue.includes(k))queue.push(k)});
+    toast(`Transcrevendo ${ks.length} trecho(s)…`);
+    await processQueue();setStatus("Gerando anotações…","");
+    try{await updateNotes(cur,true);await finalSummary(cur);setStatus("Pronto.","");toast("Resumo pronto")}catch(err){setStatus("Falhou: "+err.message,"")}renderAll()}
+  if(b.dataset.del){const sid=b.dataset.del;ask("Apagar esta aula?","A transcrição, as anotações e o áudio desta aula serão apagados deste celular.",async()=>{
+    await dbDel("sessions",sid);for(const k of await dbKeysBySid("audio",sid))await dbDel("audio",k);for(const k of await dbKeysBySid("chunks",sid))await dbDel("chunks",k);
+    if(cur&&cur.id===sid)cur=null;renderAll();toast("Aula apagada")})}});
+
+function updateControls(){
+  const live=!!rec&&!rec.finishing;
+  $("#btnRec").hidden=live;$("#btnMark").disabled=!live;$("#btnPause").disabled=!live;$("#btnStop").disabled=!live;
+  $("#btnRec").disabled=!!rec;$("#btnMark").hidden=!live;$("#btnPause").hidden=!live;$("#btnStop").hidden=!live;
+  $("#startCard").hidden=!!rec}
+
+/* ---------- export ---------- */
+function download(blob,name){const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000)}
+const baseName=s=>`${s.disciplina} ${new Date(s.inicio).toISOString().slice(0,10)}`.replace(/[\\/:*?"<>|]/g,"-");
+$("#btnMd").onclick=()=>{if(!cur)return;const s=cur,n=s.notes||normNotes({});
+  let t=`# ${s.disciplina}${s.tema?" — "+s.tema:""}\n${dateStr(s.inicio)} · duração ${fmt(s.dur)}\n\n`;
+  if(s.resumo)t+=s.resumo+"\n\n";
+  if(s.marks.length)t+=`## Trechos marcados\n${s.marks.map(m=>`- [${fmt(m.t)}] ${m.nota||""} — "${m.trecho}"`).join("\n")}\n\n`;
+  t+=`## Transcrição\n\n${s.entries.map(e=>`[${fmt(e.t)}] ${e.who==="x"?"":"**"+e.who+":** "}${e.text}`).join("\n\n")}\n`;
+  download(new Blob([t],{type:"text/markdown"}),baseName(s)+".md")};
+$("#btnCopy").onclick=async()=>{if(!cur||!cur.resumo)return;try{await navigator.clipboard.writeText(cur.resumo);toast("Resumo copiado")}catch(e){toast("Não deu para copiar. Selecione o texto manualmente.")}};
+$("#btnAudio").onclick=async()=>{if(!cur)return;const rows=(await dbBySid("audio",cur.id)).sort((a,b)=>a.part-b.part||a.seq-b.seq);
+  if(!rows.length){toast("Nenhum áudio salvo para esta aula.");return}
+  const mime=cur.mime||rows[0].blob.type||"audio/webm";const ext=mime.includes("ogg")?"ogg":mime.includes("mp4")?"m4a":"webm";
+  download(new Blob(rows.map(r=>r.blob),{type:mime.split(";")[0]}),baseName(cur)+"."+ext)};
+
+/* ---------- tabs, sheets ---------- */
+function switchTab(v){document.querySelectorAll(".tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));
+  ["aula","notas","painel","hist"].forEach(x=>$("#v-"+x).hidden=x!==v);$("#controls").hidden=v==="hist"&&!rec;
+  if(v==="hist")renderHist();if(v==="painel")renderDash();try{localStorage.setItem("caderno.tab",v)}catch(e){}}
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>switchTab(b.dataset.v));
+function ask(title,text,yes){$("#cfTitle").textContent=title;$("#cfText").textContent=text;$("#confirm").hidden=false;
+  $("#cfYes").onclick=()=>{$("#confirm").hidden=true;yes()};$("#cfNo").onclick=()=>$("#confirm").hidden=true}
+function fillDisc(){const sel=$("#selDisc");const prev=sel.value;sel.innerHTML=S.disc.map(d=>`<option>${esc(d)}</option>`).join("");if(S.disc.includes(prev))sel.value=prev;
+  try{const last=localStorage.getItem("caderno.disc");if(!prev&&last&&S.disc.includes(last))sel.value=last}catch(e){}}
+$("#selDisc").onchange=()=>{try{localStorage.setItem("caderno.disc",$("#selDisc").value)}catch(e){}};
+function openSettings(msg){if(msg)$("#setMsg").textContent=msg;$("#setKey").value=S.key;$("#setDisc").value=S.disc.join("\n");$("#setDiar").checked=S.diar;
+  $("#setNotesMin").value=S.notesMin;$("#setChunk").value=S.chunk;$("#setSil").value=S.sil;$("#setStt").value=S.stt;$("#setLlm").value=S.llm;$("#keyResult").textContent="";$("#sheet").hidden=false}
+$("#btnSettings").onclick=()=>openSettings();$("#btnKeyFromNotice").onclick=()=>openSettings();
+$("#btnCloseSet").onclick=()=>$("#sheet").hidden=true;
+$("#btnSaveSet").onclick=()=>{S.key=$("#setKey").value.trim();S.disc=$("#setDisc").value.split("\n").map(x=>x.trim()).filter(Boolean);if(!S.disc.length)S.disc=DEF.disc;
+  S.diar=$("#setDiar").checked;S.notesMin=Math.min(30,Math.max(2,+$("#setNotesMin").value||5));S.chunk=Math.min(120,Math.max(15,+$("#setChunk").value||30));
+  S.sil=Math.min(.1,Math.max(.001,+$("#setSil").value||DEF.sil));S.stt=$("#setStt").value.trim()||DEF.stt;S.llm=$("#setLlm").value.trim()||DEF.llm;
+  saveS();fillDisc();$("#sheet").hidden=true;renderAll();toast("Configurações salvas");if(S.key&&queue.length)processQueue()};
+$("#btnTestKey").onclick=async()=>{const k=$("#setKey").value.trim();const r=$("#keyResult");if(!k){r.textContent="Cole a chave primeiro.";return}
+  r.textContent="Testando…";try{const res=await fetch(API+"/models",{headers:{Authorization:"Bearer "+k}});
+    if(res.ok){const d=await res.json();const ids=(d.data||[]).map(m=>m.id);const sttOk=ids.includes($("#setStt").value.trim()),llmOk=ids.includes($("#setLlm").value.trim());
+      r.textContent=sttOk&&llmOk?"Chave funcionando ✓":`Chave ok, mas ${!sttOk?"o modelo de transcrição":"o modelo de texto"} não está disponível. Disponíveis: ${ids.slice(0,8).join(", ")}…`}
+    else r.textContent=res.status===401?"Chave inválida.":"Erro "+res.status}catch(e){r.textContent="Sem conexão com o Groq."}};
+
+$("#btnRec").onclick=startRec;$("#btnMark").onclick=addMark;$("#btnPause").onclick=pauseRec;
+$("#btnStop").onclick=()=>ask("Encerrar a aula?","A gravação para, os últimos trechos são transcritos e o resumo final é gerado.",stopRec);
+$("#btnNotesNow").onclick=async()=>{if(!cur)return;const b=$("#btnNotesNow");b.disabled=true;b.textContent="Atualizando…";
+  try{await updateNotes(cur,true);if(rec)rec.lastNotes=elapsed();toast("Anotações atualizadas")}catch(e){toast(e instanceof RateErr?"Limite do minuto atingido. Tente em instantes.":e.message,3500)}
+  b.textContent="Atualizar anotações agora";renderNotes()};
+$("#btnSummary").onclick=async()=>{if(!cur)return;const b=$("#btnSummary");b.disabled=true;b.textContent="Escrevendo…";
+  try{await updateNotes(cur,true);await finalSummary(cur);toast("Resumo pronto")}catch(e){toast(e instanceof RateErr?"Limite do minuto atingido. Tente em instantes.":e.message,3500)}
+  b.textContent="Gerar resumo final";renderNotes()};
+window.addEventListener("online",()=>processQueue());
+
+/* ---------- boot ---------- */
+(async function(){
+  fillDisc();
+  // recover chunks left untranscribed and sessions interrupted by a closed page
+  try{const all=await dbAll("sessions");for(const s of all)if(s.status==="gravando"){s.status="encerrada";
+      const rows=await dbBySid("audio",s.id);s.dur=Math.max(s.dur||0,rows.length*5);await dbPut("sessions",s)}}catch(e){}
+  renderAll();
+  let t="aula";try{t=localStorage.getItem("caderno.tab")||"aula"}catch(e){}
+  switchTab(t==="hist"||t==="notas"||t==="painel"?t:"aula");
+  if(!S.key)setStatus("Configure a chave do Groq para transcrever (toque na engrenagem)","");
+})();
+</script>
+</body>
 </html>
